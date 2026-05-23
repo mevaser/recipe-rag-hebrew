@@ -1,0 +1,12 @@
+python-docx
+pypdf
+pymupdf
+sentence-transformers
+faiss-cpu
+numpy
+pandas
+python-dotenv
+tqdm
+requests
+openpyxl
+rank-bm25

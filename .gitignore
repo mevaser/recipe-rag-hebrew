@@ -1,0 +1,76 @@
+# =========================
+# Python cache
+# =========================
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# =========================
+# Virtual environments
+# =========================
+.venv/
+venv/
+env/
+
+# =========================
+# Secrets / environment files
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# Logs
+# =========================
+*.log
+
+# =========================
+# OS / IDE files
+# =========================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# =========================
+# Build artifacts
+# =========================
+*.egg-info/
+dist/
+build/
+
+# =========================
+# RAG raw/private data
+# Usually do not upload raw recipe corpus
+# =========================
+data/raw/
+
+# =========================
+# RAG debug / temporary inspection outputs
+# =========================
+data/debug/
+
+# =========================
+# RAG generated artifacts
+# These can be regenerated locally
+# =========================
+data/processed/*.faiss
+data/processed/*.pkl
+data/processed/*.npy
+data/processed/*.npz
+data/processed/chunks.json
+data/processed/indexed_chunks.json
+data/processed/documents.json
+data/processed/documents_dedup.json
+data/processed/recipes_inventory.csv
+data/processed/dedup_report.json
+
+# =========================
+# Evaluation generated JSON outputs
+# Keep eval/*.py, gold_set.jsonl, and important .md reports tracked
+# =========================
+eval/*.json
+eval/debug/
+eval/archive/
