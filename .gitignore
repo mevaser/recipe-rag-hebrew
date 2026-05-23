@@ -74,3 +74,7 @@ data/processed/dedup_report.json
 eval/*.json
 eval/debug/
 eval/archive/
+
+# Assignment files used locally for context
+docs/mid_term_assignment.pdf
+mid_term_assignment.pdf

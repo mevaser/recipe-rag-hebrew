@@ -1,7 +1,13 @@
 from __future__ import annotations
 
-from generation import generate_answer
-from retrieval import retrieve
+try:
+    from .generation import generate_answer
+    from .retrieval import retrieve
+except ImportError:
+    from generation import generate_answer
+    from retrieval import retrieve
+
+DEFAULT_RETRIEVAL_K = 5
 
 
 def source_identifier(chunk: dict) -> str:
@@ -13,8 +19,8 @@ def source_identifier(chunk: dict) -> str:
     return source or chunk_id
 
 
-def answer(question: str, k: int = 5) -> dict:
-    retrieved_chunks = retrieve(question, k=k)
+def answer(question: str) -> dict:
+    retrieved_chunks = retrieve(question, k=DEFAULT_RETRIEVAL_K)
     answer_text = generate_answer(question, retrieved_chunks)
     sources = list(dict.fromkeys(source_identifier(chunk) for chunk in retrieved_chunks))
     return {

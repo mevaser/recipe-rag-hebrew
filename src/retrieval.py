@@ -5,7 +5,10 @@ from pathlib import Path
 
 import faiss
 
-from embeddings import DEFAULT_EMBEDDING_MODEL, embed_query, load_embedding_model
+try:
+    from .embeddings import DEFAULT_EMBEDDING_MODEL, embed_query, load_embedding_model
+except ImportError:
+    from embeddings import DEFAULT_EMBEDDING_MODEL, embed_query, load_embedding_model
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
