@@ -74,7 +74,42 @@ data/processed/dedup_report.json
 eval/*.json
 eval/debug/
 eval/archive/
+eval/_archive/
 
 # Assignment files used locally for context
 docs/mid_term_assignment.pdf
 mid_term_assignment.pdf
+
+
+# =========================
+# Local assistant / tool files
+# =========================
+.claude/
+
+# =========================
+# Local generated helper files
+# =========================
+project_tree.txt
+eval_files_after_archive*.txt
+demo/demo_output.html
+
+# =========================
+# Evaluation generated CSV/XLSX outputs
+# Keep important .md summaries manually if needed
+# =========================
+eval/*.csv
+eval/*.xlsx
+
+# =========================
+# RAGAS batch / retry generated folders
+# =========================
+eval/ragas_batches/
+eval/ragas_metric_batches/
+eval/ragas_metric_batches_strict_short_no_sources_qwen2_5_7b_instruct/
+eval/ragas_retries/
+
+# =========================
+# Optional local PDFs / duplicate reports
+# =========================
+mid_term_assignment.pdf
+docs/mid_term_assignment.pdf

@@ -1,8 +1,18 @@
 # Hebrew Recipe RAG Assistant
 
-Custom Retrieval-Augmented Generation project for a Hebrew recipe corpus.
+Custom Retrieval-Augmented Generation project for a Hebrew recipe corpus. The system is implemented manually in Python and supports Hebrew PDF/DOCX recipe documents, dense and lexical retrieval, hybrid ranking, grounded answer generation, and a structured evaluation workflow.
 
-This project currently includes the project skeleton, corpus scanner, document loader, deduplication, chunk creation, dense and BM25 indexing, dense/BM25/hybrid retrieval, grounded answer generation with a local Ollama model, and retrieval plus manual answer evaluation.
+## Project Overview
+
+This project answers Hebrew recipe questions from a local corpus. The main design goal is to keep the RAG pipeline transparent and debuggable rather than hiding it behind a framework wrapper.
+
+The current work split the problem into separate layers:
+
+- retrieval quality
+- generation quality
+- evaluator quality
+
+That separation became important because low answer-evaluation scores were not caused by retrieval alone.
 
 ## Setup
 
@@ -10,7 +20,7 @@ This project currently includes the project skeleton, corpus scanner, document l
 pip install -r requirements.txt
 ```
 
-## Add Documents
+## Data and Preprocessing Pipeline
 
 Place recipe documents under:
 
@@ -18,407 +28,386 @@ Place recipe documents under:
 data/raw
 ```
 
-The current scanner supports:
+Supported files:
 
 - `.docx`
 - `.pdf`
 
-Unsupported files are ignored for now, including `.doc`, images, videos, and temporary Word files.
+Ignored for now:
 
-## Run Scanner
+- `.doc`
+- images
+- videos
+- OCR-only documents
+
+Run the preprocessing pipeline:
 
 ```bash
 python src/scan_corpus.py
+python src/load_documents.py
+python src/deduplicate_documents.py
+python src/create_chunks.py
+python src/build_index.py
+python src/build_bm25_index.py
 ```
 
-The scanner recursively scans `data/raw`, prints a summary, and writes:
+Key generated artifacts:
 
 ```text
 data/processed/recipes_inventory.csv
-```
-
-## Load Documents
-
-```bash
-python src/load_documents.py
-```
-
-The loader extracts text from supported files in `data/raw` and writes:
-
-```text
 data/processed/documents.json
-```
-
-## Create Chunks
-
-```bash
-python src/create_chunks.py
-```
-
-Optional chunking commands:
-
-```bash
-python src/create_chunks.py --strategy full_document
-python src/create_chunks.py --strategy fixed_size --chunk-size 300 --overlap 50
-```
-
-The chunking script reads `data/processed/documents_dedup.json` by default and writes:
-
-```text
-data/processed/chunks.json
-```
-
-## Deduplicate Documents
-
-```bash
-python src/deduplicate_documents.py
-```
-
-Optional threshold:
-
-```bash
-python src/deduplicate_documents.py --threshold 0.92
-```
-
-The deduplication step reads `data/processed/documents.json` and writes:
-
-```text
 data/processed/documents_dedup.json
-data/processed/dedup_report.json
-```
-
-Recommended pipeline after document loading:
-
-```bash
-python src/load_documents.py
-python src/deduplicate_documents.py
-python src/create_chunks.py
-python src/build_index.py
-python src/build_bm25_index.py
-python eval/run_eval.py --mode hybrid --candidate-k 50 --rrf-k 30 --dense-weight 0.5 --bm25-weight 2.0
-```
-
-## Build Index
-
-```bash
-python src/build_index.py
-```
-
-Optional index command:
-
-```bash
-python src/build_index.py --chunks-path data/processed/chunks.json --index-path data/processed/index.faiss --indexed-chunks-path data/processed/indexed_chunks.json --model-name intfloat/multilingual-e5-small --batch-size 32 --min-words 5
-```
-
-The index builder embeds chunks with `intfloat/multilingual-e5-small`, writes the FAISS index, and writes the filtered chunks used by the index:
-
-```text
+data/processed/chunks.json
 data/processed/index.faiss
-data/processed/indexed_chunks.json
-```
-
-## Build BM25 Index
-
-```bash
-python src/build_bm25_index.py
-```
-
-The BM25 index is built over the same filtered chunk file used by FAISS:
-
-```text
 data/processed/indexed_chunks.json
 data/processed/bm25_index.pkl
 ```
 
-## Test Retrieval
+## Retrieval Pipeline
 
-```bash
-python src/test_retrieval.py
-```
+The retrieval stack evolved through several controlled experiments:
 
-Example retrieval commands:
+| Retrieval setup | Hit@5 | Hit@20 | MRR |
+| --- | ---: | ---: | ---: |
+| Dense FAISS | 68% | 82% | 0.4857 |
+| BM25 | 78% | 88% | 0.7155 |
+| Weighted hybrid before metadata | 82% | 88% | 0.7248 |
+| Metadata-aware weighted hybrid | 92% | 94% | 0.8412 |
 
-```bash
-python src/test_retrieval.py --query "איזה מתכון מתאים ללחם ללא גלוטן?" --k 5
-python src/test_retrieval.py --query "איך מכינים קובה?" --k 5
-```
+Current best retrieval configuration:
 
-Retrieval depends on:
+- dense retrieval with `intfloat/multilingual-e5-small`
+- BM25 lexical retrieval
+- weighted hybrid fusion
+- metadata-aware indexing through `indexed_text`
+- optional lightweight reranking / boosting for diagnostic ranking improvements
 
-```text
-data/processed/index.faiss
-data/processed/indexed_chunks.json
-```
-
-## Inspect Chunks For Gold Set
-
-Use this helper to find real chunk IDs while manually building `eval/gold_set.jsonl`:
-
-```bash
-python src/inspect_chunks.py --limit 20
-python src/inspect_chunks.py --category "קובה סלק" --limit 10
-python src/inspect_chunks.py --contains "תפוחי אדמה" --limit 10
-python src/inspect_chunks.py --source "לחם ללא גלוטן" --limit 10
-```
-
-Save selected previews to JSON:
-
-```bash
-python src/inspect_chunks.py --contains "קובה" --limit 5 --output eval/debug/inspect_kuba.json
-```
-
-## Run Retrieval Evaluation
-
-Evaluate `eval/gold_set.jsonl` with dense retrieval by default:
-
-```bash
-python eval/run_eval.py
-python eval/run_eval.py --gold-path eval/gold_set.jsonl --mode dense
-```
-
-Compare dense, BM25, and hybrid retrieval:
-
-```bash
-python eval/run_eval.py --mode dense
-python eval/run_eval.py --mode bm25
-python eval/run_eval.py --mode hybrid
-python eval/run_eval.py --mode hybrid --candidate-k 30 --rrf-k 60
-python eval/run_eval.py --mode hybrid --candidate-k 50 --rrf-k 60 --dense-weight 0.5 --bm25-weight 2.0
-```
-
-Current recommended retrieval configuration:
+Recommended retrieval command:
 
 ```bash
 python eval/run_eval.py --mode hybrid --candidate-k 50 --rrf-k 30 --dense-weight 0.5 --bm25-weight 2.0
 ```
 
-Current recommended retrieval metrics:
+Current best retrieval metrics:
 
 ```text
-Hit@1: 78%
-Hit@3: 90%
-Hit@5: 92%
-Hit@10: 94%
-Hit@20: 94%
-MRR: 0.8412
+Hit@1 = 78%
+Hit@3 = 90%
+Hit@5 = 92%
+Hit@10 = 94%
+Hit@20 = 94%
+MRR = 0.8412
 ```
 
-Detailed results are saved to:
+## Evaluation Methodology
+
+The evaluation workflow is layered:
+
+1. Retrieval was evaluated first on `eval/gold_set.jsonl`.
+2. RAGAS was used as an automatic answer-quality signal.
+3. Manual human review was added because Hebrew/RTL answer evaluation may be imperfect.
+4. Small frozen-context experiments were used to isolate generation, context-ordering, and retrieval-side issues.
+
+This project does not treat RAGAS as the only truth signal for Hebrew.
+
+## RAGAS Results
+
+Baseline RAGAS results:
 
 ```text
-eval/eval_results.json
-eval/misses_at_5.json
-eval/misses_at_10.json
-eval/misses_at_20.json
+faithfulness = 0.3945
+answer_relevancy = 0.5708
+context_precision = 0.7278
+context_recall = 0.8980
 ```
 
-Strict Hit@K remains the primary retrieval metric: a result is correct only when the exact expected `chunk_id` appears in the retrieved top K. The evaluator also reports source Hit@K and neighbor Hit@K as diagnostic metrics. Source Hit@K checks whether retrieval found the same source document, and neighbor Hit@K checks whether retrieval found the same source within one adjacent chunk. These diagnostic metrics help identify chunk-boundary or overly strict gold-label issues without changing the main score.
+Interpretation:
 
-Run selected gold-set questions through the full answer pipeline for manual answer-quality inspection:
+- `context_recall` and `context_precision` were reasonably strong
+- `faithfulness` and `answer_relevancy` were much weaker
+- this suggested that answer failures were not caused by retrieval alone
+- Hebrew evaluator limitations were also plausible
 
-```bash
-python eval/manual_answer_eval.py --question-numbers 1,6,7,9,13,14,20,30,40,49
-```
+## Manual Human Review
 
-The manual answer helper uses the current recommended hybrid retrieval configuration by default and writes:
+Human vs RAGAS manual review was added over a selected subset of problematic and control rows.
+
+Summary:
 
 ```text
-eval/manual_answer_eval.json
-eval/manual_answer_eval.md
+reviewed rows = 15
+average RAGAS faithfulness = 0.1429
+average human faithfulness = 0.2692
+average RAGAS answer relevancy = 0.2266
+average human answer relevancy = 0.2000
+answer correct but RAGAS faithfulness < 0.6 = 3
+context contains answer but generated answer is incorrect = 7
+context does not contain answer = 2
 ```
 
-Latest answer-generation status:
+Main findings:
 
-- Retrieval improved after metadata-aware indexing: Hybrid Hit@5 is `92%`, Hybrid Hit@20 is `94%`, and Hybrid MRR is `0.8412`.
-- Manual answer evaluation improved from `correct 0 / partial 3 / incorrect 7` before the generation and context fixes to `correct 8 / partial 2 / incorrect 0` after the fixes.
-- Generation now uses a Hebrew-only grounded prompt, source-neighbor context expansion, recipe-specific context filtering, and a strict fallback when the answer is not supported by the retrieved context.
+- some low RAGAS faithfulness rows were actually correct by human inspection
+- several failures happened even when the answer was already present in the retrieved context
+- some failures were true `missing_context` retrieval misses
+- some failures were caused by context ordering, noisy contexts, or garbled Hebrew/RTL text
 
-## Experiment History
+Important error categories that emerged:
 
-### Summary Table
+- `missing_context`
+- `prompt_problem`
+- `correct_context_low_rank`
+- `answer_not_direct`
+- `answer_format_issue`
+- `evaluator_hebrew_issue`
 
-| Stage | Change | Hit@5 | Hit@20 | MRR | Notes |
-| --- | --- | ---: | ---: | ---: | --- |
-| Dense baseline after gold/dedup fixes | Dense FAISS | 68% | 82% | 0.4857 | ranking and recall limitations |
-| BM25 | BM25 over text | 78% | 88% | 0.7155 | strong lexical matching |
-| Weighted hybrid before metadata | Dense + BM25 + weighted RRF | 82% | 88% | 0.7248 | best pre-metadata setup |
-| Metadata-aware weighted hybrid | `indexed_text` + hybrid | 92% | 94% | 0.8412 | current best |
+## Strict Prompt Experiment
 
-### Development Log
+The first controlled follow-up experiment tested a stricter answer prompt on frozen reviewed rows, without rerunning retrieval or RAGAS.
 
-1. Initial dense retrieval baseline
-   - Embedding model: `intfloat/multilingual-e5-small`
-   - Retrieval stack: FAISS dense retrieval over chunk text
-   - Early result after dedup and initial gold fixes: Hit@5 was around `66%`, Hit@10 was around `78%`
-   - Main issue: relevant chunks often appeared below top 5, and process questions were weak
+Strict prompt rules:
 
-2. Ranking diagnostics
-   - Added Hit@1, Hit@3, Hit@5, Hit@10, and Hit@20
-   - Added MRR and average first relevant rank
-   - Main finding: dense retrieval often found the right material by top 10, but ranking quality was weak
-   - Hit@20 around `80%` to `82%` showed that some real recall failures still remained
+- answer only from provided contexts
+- short direct answer
+- no sources section
+- no extra explanation unless the question asks why
+- exact fallback when the answer is unsupported
 
-3. Failure analysis
-   - Added `eval/analyze_misses.py`
-   - Inspected `misses_at_20` rather than only aggregate scores
-   - Found a mix of strict chunk-ID issues and real retrieval failures
-   - Important examples:
-     - `אינגריי` was not retrieved
-     - the bread recipe was confused with general bread and gluten guides
-     - some expected chunks were adjacent to retrieved chunks rather than exact matches
-
-4. Gold set cleanup
-   - Fixed weak or invalid questions in `eval/gold_set.jsonl`
-   - Repaired JSONL formatting issues
-   - Cleaned the `eval` folder structure:
-     - active files stay in `eval/`
-     - archived drafts and candidate files moved under `eval/archive`
-     - inspect and debug outputs moved under `eval/debug`
-
-5. Hybrid retrieval
-   - Added BM25 retrieval with `rank-bm25`
-   - Added dense + BM25 fusion with Reciprocal Rank Fusion
-   - Result: BM25 outperformed dense on exact recipe names, ingredients, quantities, and other lexical questions
-   - Hybrid improved over dense, but the first untuned version still needed parameter work
-
-6. Weighted hybrid tuning
-   - Added `dense_weight` and `bm25_weight`
-   - Best configuration before metadata-aware indexing:
-     - `python eval/run_eval.py --mode hybrid --candidate-k 50 --rrf-k 30 --dense-weight 0.5 --bm25-weight 2.0`
-   - Result before metadata-aware indexing:
-     - Hit@5: `82%`
-     - Hit@20: `88%`
-     - MRR: `0.7248`
-
-7. Source and neighbor diagnostic metrics
-   - Added strict, source-aware, and neighbor-aware Hit@K
-   - Main finding: strict Hit@20 was lower than source and neighbor Hit@20
-   - This showed that many misses were chunk-boundary problems rather than full retrieval failure
-   - Source and neighbor metrics made it clear that retrieval was often close to the right answer even when strict chunk-ID scoring said miss
-
-8. Manual answer evaluation
-   - Added `eval/manual_answer_eval.py`
-   - Initial answer quality on 10 selected questions:
-     - correct: `0`
-     - partial: `3`
-     - incorrect: `7`
-   - Main generation problems:
-     - hallucination and wrong-context usage
-     - contradictory fallback behavior
-     - Chinese, Arabic, and English leakage
-     - answering from general guides instead of the specific recipe
-
-9. Generation prompt and context fixes
-   - Improved the grounded Hebrew-only prompt
-   - Added strict fallback:
-     - `לא מצאתי את המידע במקורות שנשלפו.`
-   - Added source-neighbor context expansion
-   - Added recipe-specific context filtering
-   - Prevented unrelated sources such as hamburger and bolognese from dominating when the question explicitly named a recipe
-
-10. Metadata-aware indexing
-    - Diagnostics showed that rare recipe names such as `אינגריי` appeared in `metadata.source` and `metadata.category`, but not in `chunk["text"]`
-    - Added `indexed_text` composed from:
-      - source filename
-      - category
-      - original chunk text
-    - Dense and BM25 now index `indexed_text` when available, while answer generation still uses the original `text`
-    - Final retrieval metrics:
-      - Hybrid Hit@1: `78%`
-      - Hybrid Hit@3: `90%`
-      - Hybrid Hit@5: `92%`
-      - Hybrid Hit@10: `94%`
-      - Hybrid Hit@20: `94%`
-      - MRR: `0.8412`
-      - `misses_at_20`: `3`
-
-11. Final manual answer evaluation
-    - After the generation and context fixes:
-      - correct: `8`
-      - partial: `2`
-      - incorrect: `0`
-    - Remaining partials:
-      - Q6 and Q7 still fall back on gluten-free bread proofing questions
-    - Known limitation:
-      - general bread and gluten guide documents can still compete with the specific bread recipe
-      - a future improvement would be stronger recipe-title matching or section-aware chunking
-
-## Key Lessons
-
-- Dense retrieval alone was not enough for Hebrew recipe QA.
-- BM25 helped with exact recipe names, ingredients, quantities, and cooking times.
-- Metadata was critical when recipe names existed in filenames and categories but not in chunk text.
-- Strict chunk-ID metrics understated retrieval quality when answers spanned neighboring chunks.
-- Answer generation had to be evaluated separately from retrieval.
-- Safe fallback was better than hallucinating unsupported answers.
-
-## Draft Gold Questions
-
-Use Ollama to draft candidate gold-set questions from selected chunks. This writes a draft file only; manually review candidates before copying approved entries into `eval/gold_set.jsonl`.
-The script asks for practical Hebrew recipe questions and rejects weak candidates such as empty answers, very short questions, invalid categories, excessive English, or broken text.
-
-```bash
-python src/draft_gold_questions.py --contains "קובה" --limit 10 --questions-per-chunk 2
-python src/draft_gold_questions.py --contains "לחם ללא גלוטן" --limit 5 --questions-per-chunk 2
-python src/draft_gold_questions.py --contains "חומוס" --limit 10 --questions-per-chunk 2
-python src/draft_gold_questions.py --contains "פיצה" --limit 10 --questions-per-chunk 2
-```
-
-By default, the output file is overwritten. Use `--append` to add candidates to an existing JSONL file:
-
-```bash
-python src/draft_gold_questions.py --contains "חומוס" --limit 5 --questions-per-chunk 2 --output eval/archive/gold_candidates_kuba.jsonl --append
-```
-
-Draft candidates are saved to:
+Results:
 
 ```text
-eval/archive/gold_candidates_*.jsonl
+total rows = 6
+strict_answer_correct:
+  yes = 3
+  partial = 1
+  no = 2
+strict_answer_better_than_original:
+  yes = 4
+  partial = 1
+  no = 1
+improvement rate = 0.8333
 ```
 
-Merge all topic-specific candidate files into one review set:
+Conclusion:
 
-```bash
-python src/merge_gold_candidates.py
-```
+- strict prompt significantly improved generation failures
+- the answer format should become the default evaluation format
+- low RAGAS scores were partly caused by avoidable generation behavior, not only by retrieval
+- `strict_short_no_sources` is now the default prompt version for evaluation scripts
+- the old prompt is still available through `--prompt-version baseline`
+- evaluation scripts now auto-load the project `.env` file without overriding shell variables
+- an optional OpenAI GPT backend is available for controlled comparison against the local answer model
 
-The merger reads `eval/archive/gold_candidates_*.jsonl`, removes exact duplicates, and writes:
-Archived candidate and review files are kept under `eval/archive` to keep the active evaluation root clean.
+## Context Ordering Experiment
+
+The second controlled follow-up experiment tested different frozen context variants on the remaining problematic rows:
+
+- `current_top_5`
+- `top_1_only`
+- `top_3_only`
+- `oracle_expected_chunk_if_available`
+
+Reviewed results:
 
 ```text
-eval/archive/gold_candidates_all.jsonl
-eval/archive/gold_candidates_review.csv
-eval/archive/gold_candidates_review.xlsx
+total reviewed rows = 35
+manual_answer_correct:
+  no = 27
+  partial = 6
+  yes = 2
+manual_variant_better:
+  no = 26
+  yes = 5
+  partial = 4
+oracle unavailable questions:
+  Q4, Q5, Q10, Q35, Q46
+oracle available but still not fully correct:
+  Q29, Q31, Q41
+top_1_only better than current_top_5:
+  Q31, Q41
+top_3_only better than current_top_5:
+  Q31, Q50
+current_top_5 already correct:
+  Q50
 ```
 
-Excel users should open `eval/archive/gold_candidates_review.xlsx` for manual review. The CSV is also written as UTF-8 with BOM (`utf-8-sig`) so Excel can detect Hebrew text more reliably.
+Interpretation:
 
-## Ask A Question
+- `missing_context` rows stayed unresolved when the expected chunk was not retrieved at all
+- `top_1_only` is risky and should not become the default
+- `top_3_only` looks more promising than `top_1_only`
+- some oracle-available rows still failed, which points to Hebrew/RTL extraction or local model extraction limitations, not only ranking
 
-Install and pull the local Ollama model:
+## Current Conclusions
+
+1. Retrieval improved substantially after the metadata-aware hybrid retrieval baseline.
+2. Low RAGAS faithfulness and answer relevancy were not caused by retrieval alone.
+3. Manual review and frozen-context experiments showed that the main remaining bottleneck is Hebrew/RTL answer generation quality, especially for the local model.
+4. `strict_short_no_sources` is the default answer format for evaluation because it improved reviewed generation failures.
+5. `generation_context_k` remains configurable, but `generation_context_k=3` is not part of the default local setup because it did not materially improve the local model.
+6. Lightweight rerank was useful diagnostically, but no tuned configuration was stable enough to enable by default.
+7. The final system candidate is intentionally conservative and is based on controlled evidence rather than on a single metric.
+
+## Current Recommended Evaluation Setup
+
+- retrieval: metadata-aware hybrid retrieval baseline
+- prompt: `strict_short_no_sources`
+- answer backend: local `qwen2.5:7b-instruct` via Ollama for offline/local demo
+- optional higher-quality backend: `GPT-4.1-mini`
+- `generation_context_k`: configurable, but not default
+- lightweight rerank: diagnostic/configurable only, disabled by default
+
+## Final Submission State
+
+The project is packaged around a stable final candidate:
+
+- retrieval: metadata-aware hybrid retrieval baseline
+- prompt: `strict_short_no_sources`
+- local backend: `qwen2.5:7b-instruct` via Ollama for offline/local demo
+- optional higher-quality backend: `GPT-4.1-mini`
+- `generation_context_k`: configurable, but not default
+- lightweight rerank: diagnostic/configurable only, disabled by default
+
+Further work remains optional and is documented in the final report and status documents as future improvements rather than as required unfinished tasks.
+
+## How to Reproduce Evaluation Artifacts
+
+Note: this section is optional historical/reproducibility material. It is not required for running the live demo or understanding the final submitted system.
+
+Evaluation default prompt note:
+
+- evaluation scripts now default to `strict_short_no_sources`
+- the old prompt remains available with `--prompt-version baseline`
+- this change is based on the strict prompt experiment
+- evaluation scripts auto-load the project `.env` file
+- the local answer backend remains the default backend
+- the optional OpenAI backend is for controlled frozen-context comparison only
+- `generation_context_k` can cap how many retrieved contexts are passed into answer generation without changing retrieval itself
+
+Verify `.env` loading safely:
 
 ```bash
-ollama pull qwen2.5:7b-instruct
+python -c "from src.env_utils import load_project_env; load_project_env(); import os; k=os.getenv('OPENAI_API_KEY'); print('OPENAI_API_KEY exists:', bool(k)); print('prefix:', k[:7] if k else None); print('length:', len(k) if k else 0)"
 ```
 
-Ask with the default question:
+Lightweight smoke test:
 
 ```bash
-python src/ask.py
+python eval/run_ragas_eval.py --start 35 --limit 1 --metrics faithfulness --prompt-version strict_short_no_sources --preview-results
+python eval/run_ragas_eval.py --start 35 --limit 1 --metrics faithfulness --generation-context-k 3 --preview-results
 ```
 
-Example question commands:
+Retrieval evaluation:
 
 ```bash
-python src/ask.py --question "איך מכינים קובה?"
-python src/ask.py --question "איזה מתכון מתאים ללחם ללא גלוטן?"
+python eval/run_eval.py --mode hybrid --candidate-k 50 --rrf-k 30 --dense-weight 0.5 --bm25-weight 2.0
 ```
 
-Optional `.env` file:
+Human vs RAGAS review artifacts:
 
-```text
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=qwen2.5:7b-instruct
+```bash
+python eval/create_human_ragas_review_set.py
+python eval/fill_human_ragas_review_from_labels.py
+python eval/summarize_human_ragas_review.py --input eval\human_vs_ragas_review_set_filled.csv --output eval\human_vs_ragas_review_summary_filled.csv
 ```
 
-If Ollama is not running or the model is unavailable, the pipeline still runs and returns a grounded placeholder answer listing the retrieved sources instead of inventing an answer.
+Strict prompt review artifacts:
+
+```bash
+python eval/run_strict_prompt_on_review_subset.py
+python eval/fill_strict_prompt_review_from_labels.py
+python eval/summarize_strict_prompt_review.py
+```
+
+Context ordering experiment artifacts:
+
+```bash
+python eval\build_context_ordering_experiment.py
+python eval\run_strict_prompt_context_ordering_experiment.py --answer-backend local --answer-model qwen2.5:7b-instruct
+python eval\run_strict_prompt_context_ordering_experiment.py --answer-backend openai --answer-model gpt-4.1-mini
+python eval\fill_context_ordering_review_from_labels.py
+python eval\summarize_context_ordering_review.py
+```
+
+Focused local vs OpenAI comparison:
+
+```bash
+python eval/compare_local_vs_openai_generation.py --openai-model gpt-4.1-mini
+python eval\fill_openai_comparison_review_from_labels.py
+python eval\summarize_openai_comparison_review.py
+```
+
+Frozen-context `generation_context_k` comparison:
+
+```bash
+python eval\test_generation_context_k.py --answer-backend local --answer-model qwen2.5:7b-instruct --generation-context-k 3
+python eval\test_generation_context_k.py --answer-backend openai --answer-model gpt-4.1-mini --generation-context-k 3
+python eval\fill_generation_context_k_review_from_labels.py
+python eval\summarize_generation_context_k_review.py
+```
+
+Lightweight rerank diagnostic:
+
+```bash
+python eval\test_lightweight_rerank.py
+```
+
+Filled comparison outputs:
+
+- `eval/local_vs_openai_generation_comparison_filled.csv`
+- `eval/local_vs_openai_generation_comparison_summary_filled.csv`
+- `eval/openai_backend_comparison_findings.md`
+- `eval/generation_context_k_comparison_filled.csv`
+- `eval/generation_context_k_comparison_summary_filled.csv`
+- `eval/generation_context_k_findings.md`
+- `eval/lightweight_rerank_comparison.csv`
+- `eval/lightweight_rerank_findings.md`
+
+Additional artifact helpers:
+
+```bash
+python eval\fill_human_ragas_review_from_labels.py
+python eval\summarize_human_ragas_review.py
+python eval\fill_strict_prompt_review_from_labels.py
+python eval\summarize_strict_prompt_review.py
+python eval\build_context_ordering_experiment.py
+python eval\run_strict_prompt_context_ordering_experiment.py
+python eval\fill_context_ordering_review_from_labels.py
+python eval\summarize_context_ordering_review.py
+```
+
+## Project Files
+
+Key documentation and artifact summaries:
+
+- `report/final_report.md`
+- `report/presentation_script.md`
+- `report/presentation_bullets.md`
+- `report/live_demo_plan.md`
+- `report/final_report_outline.md`
+- `report/report.md`
+- `docs/current_rag_status.md`
+- `docs/remaining_tasks.md`
+- `eval/human_vs_ragas_findings_template.md`
+- `eval/strict_prompt_review_findings.md`
+- `eval/context_ordering_experiment_plan.md`
+- `eval/context_ordering_review_findings.md`
+
+## Live Demo
+
+For the presentation demo, see:
+
+- `report/live_demo_plan.md`
+- `demo/live_demo_notebook.ipynb`
+- `demo/run_demo_query.py`
+
+Recommended usage:
+
+- Open `demo/live_demo_notebook.ipynb` in VS Code.
+- Run the demo cell.
+- CLI equivalent command:
+  `python demo\run_demo_query.py --question "מה כמות הקמח, המים והשמרים בבצק הפיצה?"`
+- The notebook cell explicitly switches to the project root before calling `demo/run_demo_query.py`.
+- Running `demo/run_demo_query.py` also creates `demo/demo_output.html` as a readable HTML backup.
+- If Hebrew terminal output is not readable, display `demo/demo_output.html` inside the notebook or open it in the browser.
+- The demo does not require running RAGAS, OpenAI, full evaluation, index rebuild, or chunk rebuild.

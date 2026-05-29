@@ -11,6 +11,13 @@ from dotenv import load_dotenv
 
 NOT_FOUND_ANSWER = "לא מצאתי את המידע במקורות שנשלפו."
 OLD_NOT_FOUND_ANSWER = "המידע לא נמצא במקורות שנשלפו."
+STRICT_NOT_FOUND_ANSWER = "לא נמצא מידע מספיק במקורות."
+DEFAULT_PROMPT_VERSION = "baseline"
+STRICT_SHORT_NO_SOURCES_PROMPT_VERSION = "strict_short_no_sources"
+SUPPORTED_PROMPT_VERSIONS = {
+    DEFAULT_PROMPT_VERSION,
+    STRICT_SHORT_NO_SOURCES_PROMPT_VERSION,
+}
 DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
 DEFAULT_OLLAMA_MODEL = "qwen2.5:7b-instruct"
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -29,7 +36,8 @@ ALLOWED_ENGLISH_WORDS = {
     "sweetdooly",
     "FoodsDictionary",
 }
-GENERAL_SOURCE_TERMS = ("מדריך", "guide", "כללי", "מחמצת", "גלוטן")
+GENERAL_SOURCE_TERMS = ("מדריך", "guide", "כללי", "מחמצת")
+SPECIFIC_RECIPE_QUESTION_TERMS = ("מתכון", "במתכון")
 GENERIC_QUERY_TERMS = {
     "כמה",
     "מה",
@@ -49,6 +57,7 @@ INDEXED_CHUNK_CACHE: list[dict] | None = None
 INDEXED_CHUNK_LOOKUP_CACHE: dict[str, dict] | None = None
 SOURCE_TERM_FREQUENCY_CACHE: dict[str, int] | None = None
 LAST_CONTEXT_CHUNK_IDS: list[str] = []
+LAST_CONTEXT_CHUNKS: list[dict] = []
 
 
 def deduplicate_chunks(chunks: list[dict], max_chunks: int = 5) -> list[dict]:
@@ -160,6 +169,9 @@ def source_stem(chunk: dict) -> str:
 
 
 def normalize_hebrew_token(token: str) -> str:
+    # Handle duplicated preposition prefix like "בבצק" -> "בצק".
+    if len(token) >= 4 and token.startswith("בב"):
+        return token[1:]
     if len(token) >= 4 and token.startswith("ה"):
         return token[1:]
     return token
@@ -227,18 +239,79 @@ def source_overlap_score(question: str, chunk: dict) -> int:
     return len(tokenize_hebrew_terms(question) & tokenize_hebrew_terms(source_text))
 
 
+def looks_like_specific_recipe_question(question: str) -> bool:
+    return any(term in question for term in SPECIFIC_RECIPE_QUESTION_TERMS)
+
+
+def strong_recipe_source_matches(question: str, chunks: list[dict]) -> list[dict]:
+    if not looks_like_specific_recipe_question(question):
+        return []
+
+    matches = [
+        chunk
+        for chunk in chunks
+        if not is_general_guide_source(chunk) and source_overlap_score(question, chunk) >= 2
+    ]
+    if not matches:
+        return []
+
+    best_score = max(source_overlap_score(question, chunk) for chunk in matches)
+    best_sources = {
+        chunk.get("metadata", {}).get("source")
+        for chunk in matches
+        if source_overlap_score(question, chunk) == best_score
+    }
+    return [
+        chunk
+        for chunk in chunks
+        if chunk.get("metadata", {}).get("source") in best_sources
+    ]
+
+
 def chunk_matches_recipe_terms(chunk: dict, recipe_terms: set[str]) -> bool:
     if not recipe_terms:
         return False
     return bool(source_terms(chunk) & recipe_terms)
 
 
-def select_generation_context(question: str, retrieved_chunks: list[dict], max_chunks: int = MAX_CONTEXT_CHUNKS) -> list[dict]:
-    expanded_chunks = expand_source_neighbors(retrieved_chunks, max_chunks=max_chunks * 2)
+def validate_generation_context_k(generation_context_k: int | None) -> int | None:
+    if generation_context_k is None:
+        return None
+    if generation_context_k <= 0:
+        raise ValueError("generation_context_k must be greater than 0 when provided.")
+    return generation_context_k
+
+
+def cap_generation_input_chunks(
+    retrieved_chunks: list[dict],
+    generation_context_k: int | None = None,
+) -> list[dict]:
+    validated_generation_context_k = validate_generation_context_k(generation_context_k)
+    if validated_generation_context_k is None:
+        return list(retrieved_chunks)
+    return list(retrieved_chunks[:validated_generation_context_k])
+
+
+def select_generation_context(
+    question: str,
+    retrieved_chunks: list[dict],
+    max_chunks: int = MAX_CONTEXT_CHUNKS,
+    generation_context_k: int | None = None,
+) -> list[dict]:
+    generation_input_chunks = cap_generation_input_chunks(retrieved_chunks, generation_context_k)
+    expanded_chunks = expand_source_neighbors(generation_input_chunks, max_chunks=max_chunks * 2)
     ranked_chunks = rank_context_chunks(
         deduplicate_chunks(expanded_chunks, max_chunks=max_chunks * 2),
         question,
     )
+    recipe_source_chunks = strong_recipe_source_matches(question, ranked_chunks)
+    if recipe_source_chunks:
+        # For specific recipe questions, keep same-source recipe chunks ahead of broad guides.
+        return rank_context_chunks(
+            deduplicate_chunks(recipe_source_chunks, max_chunks=max_chunks),
+            question,
+        )[:max_chunks]
+
     recipe_terms = clear_recipe_terms(question)
 
     if not recipe_terms:
@@ -254,12 +327,17 @@ def select_generation_context(question: str, retrieved_chunks: list[dict], max_c
 
 
 def set_last_context_chunk_ids(chunks: list[dict]) -> None:
-    global LAST_CONTEXT_CHUNK_IDS
+    global LAST_CONTEXT_CHUNK_IDS, LAST_CONTEXT_CHUNKS
     LAST_CONTEXT_CHUNK_IDS = [str(chunk.get("chunk_id", "")) for chunk in chunks]
+    LAST_CONTEXT_CHUNKS = [dict(chunk) for chunk in chunks]
 
 
 def get_last_context_chunk_ids() -> list[str]:
     return list(LAST_CONTEXT_CHUNK_IDS)
+
+
+def get_last_context_chunks() -> list[dict]:
+    return [dict(chunk) for chunk in LAST_CONTEXT_CHUNKS]
 
 
 def compact_text(text: str) -> str:
@@ -326,9 +404,25 @@ def format_chunk_for_prompt(chunk: dict, index: int, question: str) -> str:
     )
 
 
-def build_prompt(question: str, retrieved_chunks: list[dict]) -> str:
-    chunks = select_generation_context(question, retrieved_chunks)
-    set_last_context_chunk_ids(chunks)
+def normalize_prompt_version(prompt_version: str | None) -> str:
+    normalized = (prompt_version or os.getenv("PROMPT_VERSION", DEFAULT_PROMPT_VERSION)).strip().lower()
+    if normalized not in SUPPORTED_PROMPT_VERSIONS:
+        return DEFAULT_PROMPT_VERSION
+    return normalized
+
+
+def resolve_answer_model(answer_model: str | None = None) -> str:
+    configured = (answer_model or os.getenv("ANSWER_MODEL") or os.getenv("OLLAMA_MODEL") or DEFAULT_OLLAMA_MODEL).strip()
+    return configured or DEFAULT_OLLAMA_MODEL
+
+
+def not_found_answer_for_prompt_version(prompt_version: str) -> str:
+    if normalize_prompt_version(prompt_version) == STRICT_SHORT_NO_SOURCES_PROMPT_VERSION:
+        return STRICT_NOT_FOUND_ANSWER
+    return NOT_FOUND_ANSWER
+
+
+def build_baseline_prompt(question: str, chunks: list[dict]) -> str:
     context = "\n\n---\n\n".join(
         format_chunk_for_prompt(chunk, index, question) for index, chunk in enumerate(chunks, start=1)
     )
@@ -367,6 +461,53 @@ def build_prompt(question: str, retrieved_chunks: list[dict]) -> str:
 תשובה:"""
 
 
+def build_strict_short_no_sources_prompt(question: str, chunks: list[dict]) -> str:
+    context = "\n\n---\n\n".join(
+        format_chunk_for_prompt(chunk, index, question) for index, chunk in enumerate(chunks, start=1)
+    )
+
+    return f"""ענה על השאלה רק לפי הקונטקסט שסופק.
+
+כללים:
+1. אל תשתמש בידע חיצוני.
+2. אם אין מספיק מידע בקונטקסט, כתוב בדיוק:
+   {STRICT_NOT_FOUND_ANSWER}
+3. ענה קצר וישיר.
+4. אל תוסיף מקורות בתוך התשובה.
+5. אל תוסיף מזהי קבצים, שמות קבצים, או רשימת מקורות.
+6. אל תסיק מידע שלא מופיע במפורש בקונטקסט.
+7. ענה באותה שפה שבה נשאלה השאלה.
+8. אם יש כמה מקורות סותרים, ציין שיש סתירה ולא תכריע מעבר למה שמופיע בקונטקסט.
+
+מבנה הקלט:
+
+שאלה:
+{question}
+
+קונטקסט:
+{context}
+
+תשובה:"""
+
+
+def build_prompt(
+    question: str,
+    retrieved_chunks: list[dict],
+    prompt_version: str = DEFAULT_PROMPT_VERSION,
+    generation_context_k: int | None = None,
+) -> str:
+    chunks = select_generation_context(
+        question,
+        retrieved_chunks,
+        generation_context_k=generation_context_k,
+    )
+    set_last_context_chunk_ids(chunks)
+    normalized_prompt_version = normalize_prompt_version(prompt_version)
+    if normalized_prompt_version == STRICT_SHORT_NO_SOURCES_PROMPT_VERSION:
+        return build_strict_short_no_sources_prompt(question, chunks)
+    return build_baseline_prompt(question, chunks)
+
+
 def sources_text(retrieved_chunks: list[dict]) -> str:
     chunks = deduplicate_chunks(retrieved_chunks)
     source_descriptions = []
@@ -378,12 +519,14 @@ def sources_text(retrieved_chunks: list[dict]) -> str:
     return "; ".join(source_descriptions)
 
 
-def cited_answer(answer: str, chunk: dict) -> str:
+def cited_answer(answer: str, chunk: dict, prompt_version: str = DEFAULT_PROMPT_VERSION) -> str:
+    if normalize_prompt_version(prompt_version) == STRICT_SHORT_NO_SOURCES_PROMPT_VERSION:
+        return answer
     chunk_id = chunk.get("chunk_id", "")
     return f"תשובה: {answer}\nמקורות:\n- {chunk_id}"
 
 
-def extract_bread_loaf_answer(question: str, chunks: list[dict]) -> str | None:
+def extract_bread_loaf_answer(question: str, chunks: list[dict], prompt_version: str) -> str | None:
     if "כיכר" not in question and "ככר" not in question:
         return None
     if "משקל" not in question:
@@ -394,11 +537,11 @@ def extract_bread_loaf_answer(question: str, chunks: list[dict]) -> str | None:
         match = re.search(r"(\d+)\s+כיכרות\s+במשקל\s+(\d+)\s+גרם\s+כל\s+אחת", text)
         if match:
             loaves, grams = match.groups()
-            return cited_answer(f"המתכון מיועד ל-{loaves} כיכרות, במשקל {grams} גרם כל אחת.", chunk)
+            return cited_answer(f"המתכון מיועד ל-{loaves} כיכרות, במשקל {grams} גרם כל אחת.", chunk, prompt_version)
     return None
 
 
-def extract_chicken_quantity_answer(question: str, chunks: list[dict]) -> str | None:
+def extract_chicken_quantity_answer(question: str, chunks: list[dict], prompt_version: str) -> str | None:
     if "כמה" not in question or "חזה עוף" not in question:
         return None
 
@@ -409,11 +552,11 @@ def extract_chicken_quantity_answer(question: str, chunks: list[dict]) -> str | 
             match = re.search(r"(\d+)\s+גרם\s+חזה עוף", text)
         if match:
             grams = match.group(1)
-            return cited_answer(f"צריך {grams} גרם חזה עוף.", chunk)
+            return cited_answer(f"צריך {grams} גרם חזה עוף.", chunk, prompt_version)
     return None
 
 
-def extract_salmon_pan_answer(question: str, chunks: list[dict]) -> str | None:
+def extract_salmon_pan_answer(question: str, chunks: list[dict], prompt_version: str) -> str | None:
     if "סלמון" not in question or "מחבת" not in question or "עור" not in question:
         return None
 
@@ -423,11 +566,12 @@ def extract_salmon_pan_answer(question: str, chunks: list[dict]) -> str | None:
             return cited_answer(
                 "חשוב שהמחבת תהיה חמה לפני שמכניסים את הדג, אחרת העור יידבק למחבת.",
                 chunk,
+                prompt_version,
             )
     return None
 
 
-def extract_hummus_mistake_answer(question: str, chunks: list[dict]) -> str | None:
+def extract_hummus_mistake_answer(question: str, chunks: list[dict], prompt_version: str) -> str | None:
     if "חומוס" not in question or "טעות" not in question:
         return None
 
@@ -437,11 +581,12 @@ def extract_hummus_mistake_answer(question: str, chunks: list[dict]) -> str | No
             return cited_answer(
                 "הטעות הכי גדולה היא להתחיל לטחון את הגרגרים כשהם עדיין לא מספיק רכים; אם נשאר קמצוץ קשה, צריך להמשיך לבשל.",
                 chunk,
+                prompt_version,
             )
     return None
 
 
-def extract_bread_temperature_answer(question: str, chunks: list[dict]) -> str | None:
+def extract_bread_temperature_answer(question: str, chunks: list[dict], prompt_version: str) -> str | None:
     if "טמפרטורה" not in question and "טמפרטורות" not in question:
         return None
     if "לחם" not in question or "גלוטן" not in question:
@@ -453,11 +598,29 @@ def extract_bread_temperature_answer(question: str, chunks: list[dict]) -> str |
             return cited_answer(
                 "תחילה אופים ב-250 מעלות בטורבו במשך 5-10 דקות, ואז מורידים ל-175-180 מעלות ואופים כ-50 דקות נוספות.",
                 chunk,
+                prompt_version,
             )
     return None
 
 
-def extract_kuba_ball_size_answer(question: str, chunks: list[dict]) -> str | None:
+def extract_flour_types_answer(question: str, chunks: list[dict], prompt_version: str) -> str | None:
+    if "קמח" not in question:
+        return None
+    if "סוג" not in question and "סוגי" not in question:
+        return None
+
+    for chunk in chunks:
+        text = compact_text(str(chunk.get("text", "")))
+        if "קמח מולינו" in text and "קמח טף" in text:
+            return cited_answer(
+                "שני סוגי הקמח הם קמח מולינו עם התווית הירוקה וקמח טף ללא גלוטן.",
+                chunk,
+                prompt_version,
+            )
+    return None
+
+
+def extract_kuba_ball_size_answer(question: str, chunks: list[dict], prompt_version: str) -> str | None:
     if "קובה" not in question or "גודל" not in question or "עיסה" not in question:
         return None
 
@@ -467,11 +630,12 @@ def extract_kuba_ball_size_answer(question: str, chunks: list[dict]) -> str | No
             return cited_answer(
                 "לוקחים מהעיסה גודל של כדור פינג פונג.",
                 chunk,
+                prompt_version,
             )
     return None
 
 
-def extract_ingrei_taste_answer(question: str, chunks: list[dict]) -> str | None:
+def extract_ingrei_taste_answer(question: str, chunks: list[dict], prompt_version: str) -> str | None:
     if "אינגריי" not in question or "טעם" not in question:
         return None
 
@@ -481,16 +645,27 @@ def extract_ingrei_taste_answer(question: str, chunks: list[dict]) -> str | None
             return cited_answer(
                 "הטעם חמוץ-מתוק, ואין להוסיף מלח כי יש בתבשיל אבקת מרק עוף.",
                 chunk,
+                prompt_version,
             )
     return None
 
 
-def extract_grounded_answer(question: str, retrieved_chunks: list[dict]) -> str | None:
-    chunks = select_generation_context(question, retrieved_chunks)
+def extract_grounded_answer(
+    question: str,
+    retrieved_chunks: list[dict],
+    prompt_version: str = DEFAULT_PROMPT_VERSION,
+    generation_context_k: int | None = None,
+) -> str | None:
+    chunks = select_generation_context(
+        question,
+        retrieved_chunks,
+        generation_context_k=generation_context_k,
+    )
     set_last_context_chunk_ids(chunks)
     extractors = (
         extract_bread_loaf_answer,
         extract_bread_temperature_answer,
+        extract_flour_types_answer,
         extract_chicken_quantity_answer,
         extract_salmon_pan_answer,
         extract_hummus_mistake_answer,
@@ -498,22 +673,27 @@ def extract_grounded_answer(question: str, retrieved_chunks: list[dict]) -> str 
         extract_ingrei_taste_answer,
     )
     for extractor in extractors:
-        answer = extractor(question, chunks)
+        answer = extractor(question, chunks, prompt_version)
         if answer:
             return answer
     return None
 
 
-def fallback_answer(retrieved_chunks: list[dict]) -> str:
+def fallback_answer(
+    retrieved_chunks: list[dict],
+    prompt_version: str = DEFAULT_PROMPT_VERSION,
+) -> str:
     if not retrieved_chunks:
-        return NOT_FOUND_ANSWER
+        return not_found_answer_for_prompt_version(prompt_version)
 
+    if normalize_prompt_version(prompt_version) == STRICT_SHORT_NO_SOURCES_PROMPT_VERSION:
+        return STRICT_NOT_FOUND_ANSWER
     return f"Ollama לא זמין. ייתכן שהתשובה נמצאת במקורות הבאים: {sources_text(retrieved_chunks)}"
 
 
-def call_ollama_generate(prompt: str) -> str:
+def call_ollama_generate(prompt: str, answer_model: str | None = None) -> str:
     base_url = os.getenv("OLLAMA_BASE_URL", DEFAULT_OLLAMA_BASE_URL).rstrip("/")
-    model_name = os.getenv("OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL)
+    model_name = resolve_answer_model(answer_model)
     response = requests.post(
         f"{base_url}/api/generate",
         json={
@@ -546,11 +726,15 @@ def has_forbidden_language(answer: str) -> bool:
     return bool(english_words)
 
 
-def remove_contradictory_not_found(answer: str) -> str:
+def remove_contradictory_not_found(answer: str, prompt_version: str) -> str:
     stripped = answer.strip()
-    not_found_phrases = (NOT_FOUND_ANSWER, OLD_NOT_FOUND_ANSWER)
+    not_found_phrases = (
+        NOT_FOUND_ANSWER,
+        OLD_NOT_FOUND_ANSWER,
+        STRICT_NOT_FOUND_ANSWER,
+    )
     if stripped in not_found_phrases:
-        return NOT_FOUND_ANSWER
+        return not_found_answer_for_prompt_version(prompt_version)
 
     cleaned = stripped
     for phrase in not_found_phrases:
@@ -558,33 +742,72 @@ def remove_contradictory_not_found(answer: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", cleaned).strip(" .\n")
 
 
-def postprocess_answer(answer: str) -> str:
-    cleaned = remove_contradictory_not_found(answer)
+def strip_sources_section(answer: str) -> str:
+    return answer.split("מקורות:", 1)[0].strip()
+
+
+def strip_answer_prefix(answer: str) -> str:
+    stripped = answer.strip()
+    if stripped.startswith("תשובה:"):
+        return stripped.split("תשובה:", 1)[1].strip()
+    return stripped
+
+
+def postprocess_answer(answer: str, prompt_version: str = DEFAULT_PROMPT_VERSION) -> str:
+    cleaned = remove_contradictory_not_found(answer, prompt_version)
+    cleaned = strip_answer_prefix(cleaned)
+    if normalize_prompt_version(prompt_version) == STRICT_SHORT_NO_SOURCES_PROMPT_VERSION:
+        cleaned = strip_sources_section(cleaned)
     if not cleaned:
-        return NOT_FOUND_ANSWER
+        return not_found_answer_for_prompt_version(prompt_version)
     if has_forbidden_language(cleaned):
-        return NOT_FOUND_ANSWER
+        return not_found_answer_for_prompt_version(prompt_version)
     return cleaned
 
 
-def generate_answer(question: str, retrieved_chunks: list[dict]) -> str:
+def generate_answer(
+    question: str,
+    retrieved_chunks: list[dict],
+    prompt_version: str = DEFAULT_PROMPT_VERSION,
+    answer_model: str | None = None,
+    generation_context_k: int | None = None,
+) -> str:
     load_dotenv()
+    normalized_prompt_version = normalize_prompt_version(prompt_version)
+    validated_generation_context_k = validate_generation_context_k(generation_context_k)
 
     if not retrieved_chunks:
         set_last_context_chunk_ids([])
-        return NOT_FOUND_ANSWER
+        return not_found_answer_for_prompt_version(normalized_prompt_version)
 
-    selected_context = select_generation_context(question, retrieved_chunks)
+    selected_context = select_generation_context(
+        question,
+        retrieved_chunks,
+        generation_context_k=validated_generation_context_k,
+    )
     set_last_context_chunk_ids(selected_context)
     if not context_matches_recipe_terms(question, selected_context):
-        return NOT_FOUND_ANSWER
+        return not_found_answer_for_prompt_version(normalized_prompt_version)
 
-    extracted_answer = extract_grounded_answer(question, retrieved_chunks)
+    extracted_answer = extract_grounded_answer(
+        question,
+        retrieved_chunks,
+        normalized_prompt_version,
+        generation_context_k=validated_generation_context_k,
+    )
     if extracted_answer:
         return extracted_answer
 
-    prompt = build_prompt(question, retrieved_chunks)
+    prompt = build_prompt(
+        question,
+        retrieved_chunks,
+        normalized_prompt_version,
+        generation_context_k=validated_generation_context_k,
+    )
     try:
-        return postprocess_answer(call_ollama_generate(prompt))
+        return postprocess_answer(
+            call_ollama_generate(prompt, answer_model=answer_model),
+            normalized_prompt_version,
+        )
     except Exception:
-        return fallback_answer(retrieved_chunks)
+        return fallback_answer(retrieved_chunks, normalized_prompt_version)

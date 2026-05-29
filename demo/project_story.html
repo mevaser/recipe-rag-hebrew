@@ -1,0 +1,2138 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>מערכת RAG למתכונים בעברית</title>
+    <style>
+      :root {
+        --bg: #08101f;
+        --bg-2: #0d1630;
+        --panel: rgba(17, 24, 47, 0.82);
+        --panel-2: rgba(12, 18, 37, 0.9);
+        --border: rgba(177, 191, 255, 0.14);
+        --border-strong: rgba(148, 198, 255, 0.28);
+        --text: #f3f6ff;
+        --muted: #b4c0eb;
+        --accent: #7a5cff;
+        --accent-2: #1ecbff;
+        --accent-3: #ff70d2;
+        --good: #6ee7b7;
+        --warn: #ffd166;
+        --shadow: 0 26px 60px rgba(0, 0, 0, 0.34);
+        --radius-xl: 28px;
+        --radius-lg: 22px;
+        --radius-md: 16px;
+        --max-width: 1200px;
+        --nav-height: 82px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(
+            circle at 15% 10%,
+            rgba(30, 203, 255, 0.14),
+            transparent 20%
+          ),
+          radial-gradient(
+            circle at 85% 12%,
+            rgba(122, 92, 255, 0.24),
+            transparent 24%
+          ),
+          radial-gradient(
+            circle at 60% 76%,
+            rgba(255, 112, 210, 0.12),
+            transparent 22%
+          ),
+          linear-gradient(180deg, #070b16 0%, #091120 36%, #0a1326 100%);
+        min-height: 100vh;
+        overflow-x: hidden;
+      }
+
+      body::before,
+      body::after {
+        content: "";
+        position: fixed;
+        width: 320px;
+        height: 320px;
+        border-radius: 50%;
+        filter: blur(100px);
+        pointer-events: none;
+        opacity: 0.38;
+        z-index: 0;
+      }
+
+      body::before {
+        top: 100px;
+        left: -90px;
+        background: rgba(30, 203, 255, 0.16);
+      }
+
+      body::after {
+        right: -90px;
+        bottom: 20px;
+        background: rgba(122, 92, 255, 0.2);
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .shell {
+        position: relative;
+        z-index: 1;
+      }
+
+      .navbar {
+        position: sticky;
+        top: 0;
+        z-index: 30;
+        backdrop-filter: blur(18px);
+        background: rgba(8, 12, 25, 0.74);
+        border-bottom: 1px solid rgba(177, 191, 255, 0.12);
+      }
+
+      .nav-inner {
+        max-width: var(--max-width);
+        min-height: var(--nav-height);
+        margin: 0 auto;
+        padding: 0 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-weight: 800;
+        letter-spacing: 0.01em;
+      }
+
+      .brand-mark {
+        width: 42px;
+        height: 42px;
+        display: grid;
+        place-items: center;
+        border-radius: 14px;
+        background: linear-gradient(135deg, var(--accent), var(--accent-2));
+        box-shadow: 0 12px 28px rgba(122, 92, 255, 0.32);
+        color: white;
+      }
+
+      .nav-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        color: var(--muted);
+        font-size: 0.94rem;
+      }
+
+      .nav-links a {
+        padding: 10px 12px;
+        border-radius: 999px;
+        transition:
+          background 0.22s ease,
+          color 0.22s ease,
+          transform 0.22s ease;
+      }
+
+      .nav-links a:hover {
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--text);
+        transform: translateY(-1px);
+      }
+
+      .page {
+        max-width: var(--max-width);
+        margin: 0 auto;
+        padding: 24px 22px 78px;
+      }
+
+      section {
+        padding: 48px 0;
+      }
+
+      .section-heading {
+        max-width: 780px;
+        margin-bottom: 24px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 14px;
+        padding: 7px 13px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        color: #dde5ff;
+        font-size: 0.88rem;
+      }
+
+      h1,
+      h2,
+      h3,
+      h4,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: clamp(2.6rem, 6.2vw, 4.8rem);
+        line-height: 1.04;
+        letter-spacing: -0.045em;
+        max-width: 700px;
+      }
+
+      h2 {
+        font-size: clamp(1.8rem, 3.5vw, 2.65rem);
+        line-height: 1.1;
+        letter-spacing: -0.03em;
+        margin-bottom: 10px;
+      }
+
+      h3 {
+        font-size: 1.08rem;
+        line-height: 1.25;
+        margin-bottom: 8px;
+      }
+
+      h4 {
+        font-size: 0.9rem;
+        margin-bottom: 7px;
+        color: #dce4ff;
+      }
+
+      p {
+        color: var(--muted);
+        line-height: 1.72;
+        font-size: 0.97rem;
+      }
+
+      .gradient-text {
+        background: linear-gradient(
+          135deg,
+          #fcfdff 12%,
+          #95dcff 50%,
+          #e09fff 100%
+        );
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+
+      .panel,
+      .card,
+      .metric-card,
+      .pipeline-step,
+      .architecture-board,
+      .table-wrap,
+      .demo-card,
+      .note-box,
+      .fusion-panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-xl);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(18px);
+      }
+
+      .hero {
+        padding-top: 40px;
+      }
+
+      .hero-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+        gap: 28px;
+        align-items: stretch;
+      }
+
+      .hero-copy,
+      .hero-side {
+        position: relative;
+        overflow: hidden;
+      }
+
+      .hero-copy {
+        padding: 31px;
+      }
+
+      .hero-copy::before {
+        content: "";
+        position: absolute;
+        width: 240px;
+        height: 240px;
+        top: -60px;
+        left: -60px;
+        background: radial-gradient(
+          circle,
+          rgba(122, 92, 255, 0.22),
+          transparent 70%
+        );
+        pointer-events: none;
+      }
+
+      .hero-side {
+        padding: 21px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .hero-side::after {
+        content: "";
+        position: absolute;
+        width: 220px;
+        height: 220px;
+        right: -60px;
+        bottom: -70px;
+        background: radial-gradient(
+          circle,
+          rgba(30, 203, 255, 0.18),
+          transparent 70%
+        );
+        pointer-events: none;
+      }
+
+      .hero-subtitle {
+        margin-top: 16px;
+        max-width: 700px;
+        font-size: 1rem;
+      }
+
+      .author-pill {
+        margin-top: 16px;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 13px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        color: #dfe7ff;
+        font-size: 0.9rem;
+      }
+
+      .hero-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+        margin-top: 24px;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 132px;
+        padding: 12px 18px;
+        border-radius: 999px;
+        font-weight: 700;
+        transition:
+          transform 0.22s ease,
+          box-shadow 0.22s ease,
+          border-color 0.22s ease,
+          background 0.22s ease;
+      }
+
+      .button.primary {
+        color: #fbfdff;
+        background: linear-gradient(135deg, var(--accent), var(--accent-2));
+        box-shadow: 0 18px 36px rgba(122, 92, 255, 0.22);
+      }
+
+      .button.secondary {
+        color: var(--text);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .button:hover,
+      .card:hover,
+      .metric-card:hover,
+      .pipeline-step:hover,
+      .demo-card:hover,
+      .fusion-panel:hover {
+        transform: translateY(-4px);
+      }
+
+      .hero-side-title {
+        color: #d7defa;
+        font-size: 0.84rem;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .story-highlights {
+        display: grid;
+        gap: 12px;
+      }
+
+      .story-item {
+        padding: 14px 16px;
+        border-radius: var(--radius-md);
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .story-item strong {
+        display: block;
+        margin-bottom: 6px;
+        color: #f3f7ff;
+      }
+
+      .metrics-grid,
+      .cards-grid,
+      .goals-grid,
+      .chunk-grid,
+      .experiments-grid,
+      .challenges-grid,
+      .lessons-grid,
+      .future-grid,
+      .eval-metrics-grid {
+        display: grid;
+        gap: 18px;
+      }
+
+      .metrics-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        margin-top: 24px;
+      }
+
+      .metric-card {
+        padding: 18px;
+        transition:
+          transform 0.22s ease,
+          border-color 0.22s ease,
+          background 0.22s ease;
+      }
+
+      .metric-card:hover,
+      .card:hover,
+      .pipeline-step:hover,
+      .demo-card:hover,
+      .fusion-panel:hover {
+        background: rgba(20, 28, 55, 0.92);
+        border-color: rgba(148, 198, 255, 0.28);
+      }
+
+      .metric-value {
+        display: block;
+        font-size: clamp(1.6rem, 2.6vw, 2.2rem);
+        font-weight: 800;
+        margin-bottom: 6px;
+        color: #ffffff;
+      }
+
+      .metric-label {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .cards-grid,
+      .goals-grid,
+      .chunk-grid,
+      .experiments-grid,
+      .challenges-grid,
+      .lessons-grid,
+      .future-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .card {
+        padding: 21px;
+        transition:
+          transform 0.22s ease,
+          border-color 0.22s ease,
+          background 0.22s ease;
+      }
+
+      .icon {
+        width: 42px;
+        height: 42px;
+        display: grid;
+        place-items: center;
+        margin-bottom: 14px;
+        border-radius: 14px;
+        background: linear-gradient(
+          135deg,
+          rgba(122, 92, 255, 0.18),
+          rgba(30, 203, 255, 0.18)
+        );
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        font-size: 1.05rem;
+      }
+
+      .pipeline-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 18px;
+        align-items: stretch;
+      }
+
+      .pipeline-step {
+        min-height: 188px;
+        padding: 18px 17px;
+        position: relative;
+        background: linear-gradient(
+          180deg,
+          rgba(19, 27, 53, 0.94),
+          rgba(12, 18, 37, 0.94)
+        );
+        transition:
+          transform 0.22s ease,
+          border-color 0.22s ease;
+      }
+
+      .step-number {
+        width: 33px;
+        height: 33px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 12px;
+        border-radius: 12px;
+        font-weight: 800;
+        color: white;
+        background: linear-gradient(135deg, var(--accent), var(--accent-2));
+        box-shadow: 0 14px 24px rgba(122, 92, 255, 0.24);
+      }
+
+      .pipeline-step p {
+        font-size: 0.93rem;
+        line-height: 1.62;
+      }
+
+      .chunk-card {
+        position: relative;
+        overflow: hidden;
+      }
+
+      .card-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 12px;
+        padding: 6px 11px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #deebff;
+        font-size: 0.83rem;
+      }
+
+      .inline-model {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-top: 8px;
+        padding: 4px 9px;
+        border-radius: 999px;
+        background: rgba(30, 203, 255, 0.05);
+        border: 1px solid rgba(30, 203, 255, 0.1);
+        color: rgba(216, 244, 255, 0.84);
+        font-size: 0.74rem;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        opacity: 0.88;
+      }
+
+      .pipeline-footer {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      .pipeline-highlight {
+        margin-top: 18px;
+        padding: 16px 18px;
+        border-radius: 18px;
+        background: rgba(122, 92, 255, 0.07);
+        border: 1px solid rgba(122, 92, 255, 0.16);
+        color: #dce5ff;
+      }
+
+      .example-card {
+        padding: 24px;
+        background: linear-gradient(
+          180deg,
+          rgba(22, 30, 58, 0.94),
+          rgba(11, 17, 35, 0.94)
+        );
+      }
+
+      .example-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 16px;
+      }
+
+      .example-chip {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 6px 11px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        color: #dde6ff;
+        font-size: 0.82rem;
+        font-weight: 700;
+      }
+
+      .example-grid {
+        display: grid;
+        grid-template-columns: 1.05fr 0.95fr;
+        gap: 18px;
+        align-items: stretch;
+      }
+
+      .example-panel {
+        padding: 18px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.035);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .example-panel h3 {
+        margin-bottom: 10px;
+      }
+
+      .example-panel p + p {
+        margin-top: 10px;
+      }
+
+      .example-question {
+        color: var(--text);
+        font-size: 1.02rem;
+      }
+
+      .example-answer {
+        color: #f5fbff;
+      }
+
+      .insight-line {
+        margin-top: 16px;
+        padding: 14px 16px;
+        border-radius: var(--radius-md);
+        background: rgba(122, 92, 255, 0.08);
+        border: 1px solid rgba(122, 92, 255, 0.18);
+        color: #dce5ff;
+      }
+
+      .architecture-board {
+        padding: 22px;
+      }
+
+      .architecture-layout {
+        display: grid;
+        gap: 16px;
+      }
+
+      .parallel-grid {
+        display: grid;
+        grid-template-columns: 1fr 120px 1fr;
+        gap: 14px;
+        align-items: stretch;
+      }
+
+      .arch-column {
+        display: grid;
+        gap: 10px;
+      }
+
+      .arch-box {
+        min-height: 78px;
+        display: grid;
+        place-items: center;
+        padding: 14px;
+        text-align: center;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #f3f7ff;
+        font-weight: 700;
+      }
+
+      .arch-box.subtle {
+        background: rgba(255, 255, 255, 0.035);
+        color: #d9e3ff;
+      }
+
+      .arch-line {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--accent-2);
+        font-size: 1.55rem;
+        min-height: 38px;
+      }
+
+      .fusion-panel {
+        padding: 19px;
+        background: linear-gradient(
+          180deg,
+          rgba(26, 36, 69, 0.92),
+          rgba(13, 19, 38, 0.92)
+        );
+        transition:
+          transform 0.22s ease,
+          border-color 0.22s ease;
+      }
+
+      .fusion-flow {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 10px;
+        align-items: center;
+        margin-top: 12px;
+      }
+
+      .arch-arrow {
+        display: grid;
+        place-items: center;
+        color: var(--accent-2);
+        font-size: 1.55rem;
+      }
+
+      .stack-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 18px;
+      }
+
+      .model-subsection {
+        margin-top: 18px;
+        display: grid;
+        gap: 14px;
+      }
+
+      .model-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .model-card {
+        padding: 18px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .model-type {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 10px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(122, 92, 255, 0.1);
+        border: 1px solid rgba(122, 92, 255, 0.16);
+        color: #e2d8ff;
+        font-size: 0.8rem;
+        font-weight: 700;
+      }
+
+      .model-card h4 {
+        margin-bottom: 10px;
+      }
+
+      .model-card p + p {
+        margin-top: 8px;
+      }
+
+      .model-card ul {
+        margin: 10px 0 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 0.92rem;
+        line-height: 1.68;
+      }
+
+      .model-card li {
+        position: relative;
+        padding-right: 14px;
+      }
+
+      .model-card li::before {
+        content: "";
+        position: absolute;
+        top: 0.72em;
+        right: 0;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: rgba(30, 203, 255, 0.9);
+      }
+
+      .model-card.emphasis {
+        background: rgba(122, 92, 255, 0.08);
+        border-color: rgba(122, 92, 255, 0.16);
+      }
+
+      .chip {
+        padding: 9px 12px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #deebff;
+        font-size: 0.88rem;
+      }
+
+      .table-wrap {
+        padding: 18px;
+        overflow-x: auto;
+      }
+
+      table {
+        width: 100%;
+        min-width: 560px;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        padding: 12px 10px;
+        text-align: right;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        vertical-align: top;
+      }
+
+      th {
+        color: #eef3ff;
+        font-size: 0.9rem;
+      }
+
+      td {
+        color: var(--muted);
+        font-size: 0.9rem;
+        line-height: 1.62;
+      }
+
+      .highlight-row td {
+        background: rgba(110, 231, 183, 0.08);
+        color: #f3fff9;
+        font-weight: 700;
+      }
+
+      .evaluation-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1.12fr) minmax(320px, 0.88fr);
+        gap: 20px;
+        align-items: start;
+      }
+
+      .eval-metrics-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .eval-group-title {
+        grid-column: 1 / -1;
+        margin-bottom: -2px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        width: fit-content;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        color: #dde5ff;
+        font-size: 0.86rem;
+        font-weight: 700;
+      }
+
+      .eval-group-title.ragas {
+        background: rgba(122, 92, 255, 0.08);
+        border-color: rgba(122, 92, 255, 0.16);
+      }
+
+      .metric-card small {
+        display: block;
+        margin-top: 8px;
+        color: var(--muted);
+        line-height: 1.62;
+        font-size: 0.88rem;
+      }
+
+      .note-box {
+        padding: 20px;
+        background: linear-gradient(
+          180deg,
+          rgba(20, 28, 55, 0.94),
+          rgba(12, 18, 37, 0.94)
+        );
+      }
+
+      .experiments-grid .card,
+      .lessons-grid .card,
+      .future-grid .card,
+      .challenges-grid .card {
+        min-height: 100%;
+      }
+
+      .experiment-block strong {
+        color: #f1f5ff;
+      }
+
+      .experiment-block p + p {
+        margin-top: 8px;
+      }
+
+      .demo-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 16px;
+        align-items: stretch;
+      }
+
+      .demo-card {
+        padding: 20px;
+        display: grid;
+        gap: 14px;
+        height: 100%;
+        background: linear-gradient(
+          180deg,
+          rgba(20, 28, 55, 0.95),
+          rgba(11, 17, 34, 0.95)
+        );
+        transition:
+          transform 0.22s ease,
+          border-color 0.22s ease,
+          background 0.22s ease;
+      }
+
+      .demo-card.main-demo {
+        border-color: rgba(110, 231, 183, 0.24);
+        background: linear-gradient(
+          180deg,
+          rgba(24, 36, 70, 0.98),
+          rgba(11, 17, 34, 0.98)
+        );
+        box-shadow: 0 28px 64px rgba(0, 0, 0, 0.4);
+      }
+
+      .demo-label {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: fit-content;
+        padding: 7px 11px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #deebff;
+        font-size: 0.8rem;
+        font-weight: 700;
+      }
+
+      .main-demo .demo-label {
+        background: rgba(110, 231, 183, 0.1);
+        border-color: rgba(110, 231, 183, 0.22);
+        color: #eafff6;
+      }
+
+      .demo-card.fallback-demo {
+        border-color: rgba(255, 209, 102, 0.22);
+        background: linear-gradient(
+          180deg,
+          rgba(56, 42, 19, 0.45),
+          rgba(14, 18, 31, 0.96)
+        );
+      }
+
+      .fallback-demo .demo-label {
+        background: rgba(255, 209, 102, 0.1);
+        border-color: rgba(255, 209, 102, 0.22);
+        color: #fff4cc;
+      }
+
+      .demo-row.fallback-answer {
+        border-color: rgba(255, 209, 102, 0.2);
+        background: linear-gradient(
+          180deg,
+          rgba(255, 209, 102, 0.08),
+          rgba(255, 255, 255, 0.03)
+        );
+      }
+
+      .demo-row.fallback-answer p {
+        color: #fff4dc;
+      }
+
+      .demo-row {
+        border-radius: 18px;
+        padding: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .demo-answer {
+        border-color: rgba(110, 231, 183, 0.16);
+        background: linear-gradient(
+          180deg,
+          rgba(110, 231, 183, 0.08),
+          rgba(255, 255, 255, 0.03)
+        );
+      }
+
+      .demo-answer p {
+        color: #eef8ff;
+      }
+
+      .footer {
+        margin-top: 28px;
+        padding-top: 22px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        display: flex;
+        justify-content: space-between;
+        gap: 18px;
+        flex-wrap: wrap;
+        color: var(--muted);
+      }
+
+      .footer strong {
+        color: #f4f7ff;
+      }
+
+      .footer-links {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+
+      .footer-links a {
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      @media (max-width: 1120px) {
+        .hero-layout,
+        .evaluation-layout,
+        .parallel-grid,
+        .example-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .metrics-grid,
+        .cards-grid,
+        .goals-grid,
+        .chunk-grid,
+        .model-grid,
+        .demo-grid,
+        .experiments-grid,
+        .challenges-grid,
+        .lessons-grid,
+        .future-grid,
+        .eval-metrics-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .pipeline-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .fusion-flow {
+          grid-template-columns: 1fr;
+        }
+
+        .arch-arrow {
+          min-height: 24px;
+          transform: rotate(90deg);
+        }
+      }
+
+      @media (max-width: 720px) {
+        .nav-inner {
+          padding: 14px 18px;
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .page {
+          padding: 18px 16px 68px;
+        }
+
+        .metrics-grid,
+        .cards-grid,
+        .goals-grid,
+        .chunk-grid,
+        .model-grid,
+        .demo-grid,
+        .experiments-grid,
+        .challenges-grid,
+        .lessons-grid,
+        .future-grid,
+        .eval-metrics-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .pipeline-grid {
+          grid-template-columns: 1fr;
+        }
+
+        h1 {
+          font-size: 2.4rem;
+        }
+
+        h2 {
+          font-size: 1.72rem;
+        }
+
+        .hero-copy,
+        .hero-side,
+        .card,
+        .metric-card,
+        .pipeline-step,
+        .architecture-board,
+        .table-wrap,
+        .demo-card,
+        .note-box,
+        .fusion-panel {
+          border-radius: 22px;
+        }
+
+        .hero-actions {
+          flex-direction: column;
+        }
+
+        .button {
+          width: 100%;
+        }
+
+        .footer {
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="navbar">
+        <div class="nav-inner">
+          <div class="brand">
+            <div class="brand-mark">R</div>
+            <div>Hebrew Recipe RAG</div>
+          </div>
+          <nav class="nav-links">
+            <a href="#hero">Hero</a>
+            <a href="#problem">הבעיה</a>
+            <a href="#goals">מטרה</a>
+            <a href="#pipeline">Pipeline</a>
+            <a href="#chunking">Chunking</a>
+            <a href="#architecture">ארכיטקטורה</a>
+            <a href="#models">מודלים</a>
+            <a href="#retrieval-evolution">Retrieval</a>
+            <a href="#aaruuk">אערווק</a>
+            <a href="#evaluation">תוצאות</a>
+            <a href="#experiments">ניסויים</a>
+            <a href="#demo">דמו</a>
+            <a href="#challenges">אתגרים</a>
+            <a href="#lessons">תובנות</a>
+            <a href="#future">המשך</a>
+          </nav>
+        </div>
+      </header>
+
+      <main class="page">
+        <section class="hero" id="hero">
+          <div class="hero-layout">
+            <div class="panel hero-copy">
+              <div class="eyebrow">NLP Project · RAG Pipeline · Hebrew</div>
+              <h1 class="gradient-text">מערכת RAG למתכונים בעברית</h1>
+              <p class="hero-subtitle">
+                מערכת שאלות ותשובות בעברית שמחברת בין מסמכי מתכונים, אחזור
+                היברידי ו־LLM כדי להפיק תשובות קצרות ומבוססות הקשר.
+              </p>
+              <div class="author-pill">מגיש: מבשר זהוראי</div>
+              <div class="hero-actions">
+                <a class="button primary" href="#pipeline">צפה בתהליך</a>
+                <a class="button secondary" href="#evaluation">ראה תוצאות</a>
+                <a class="button secondary" href="#demo">שאלות לדוגמה</a>
+                <a
+                  class="button secondary"
+                  href="https://github.com/mevaser/recipe-rag-hebrew"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >GitHub</a
+                >
+              </div>
+            </div>
+
+            <aside class="panel hero-side">
+              <div class="hero-side-title">Engineering Story</div>
+              <div class="story-highlights">
+                <div class="story-item">
+                  <strong>לא רק דמו של RAG</strong>
+                  <p>
+                    הפרויקט מציג תהליך הנדסי מלא: corpus preparation, chunking,
+                    embeddings, retrieval, generation, evaluation וניסויים
+                    מבוקרים.
+                  </p>
+                </div>
+                <div class="story-item">
+                  <strong>Retrieval התחזק משמעותית</strong>
+                  <p>
+                    השיפורים בשליפה העלו את Hit@5 ואת MRR והראו שהמידע הנכון
+                    מגיע להקשר ברוב השאלות.
+                  </p>
+                </div>
+                <div class="story-item">
+                  <strong>Generation נשאר צוואר הבקבוק</strong>
+                  <p>
+                    גם עם אחזור חזק, התשובה הסופית עדיין דורשת שיפור. RAGAS
+                    עוזר, אבל בעברית חשוב לשלב גם ביקורת אנושית.
+                  </p>
+                </div>
+              </div>
+            </aside>
+          </div>
+
+          <div class="metrics-grid">
+            <article class="metric-card">
+              <span class="metric-value">50</span>
+              <div class="metric-label">שאלות Gold Set</div>
+            </article>
+            <article class="metric-card">
+              <span class="metric-value">92%</span>
+              <div class="metric-label">Hit@5 סופי</div>
+            </article>
+            <article class="metric-card">
+              <span class="metric-value">0.8412</span>
+              <div class="metric-label">MRR סופי</div>
+            </article>
+            <article class="metric-card">
+              <span class="metric-value">5</span>
+              <div class="metric-label">ניסויים מבוקרים</div>
+            </article>
+          </div>
+        </section>
+
+        <section id="problem">
+          <div class="section-heading">
+            <div class="eyebrow">הבעיה</div>
+            <h2>הבעיה</h2>
+            <p>
+              כדי לענות על שאלות על מתכונים בעברית, לא מספיק להפעיל מודל שפה.
+              צריך קודם לאתר את הקטע המדויק מתוך מסמכים לא מובנים, להתמודד עם
+              מורכבות לשונית בעברית, ולהבטיח שהמודל לא ימציא תשובות.
+            </p>
+          </div>
+          <div class="cards-grid">
+            <article class="card">
+              <div class="icon">📄</div>
+              <h3>מידע שמסתתר במסמכים</h3>
+              <p>
+                מתכונים נשמרים כקבצי DOCX ו־PDF, ולא כמסד נתונים מובנה. כדי
+                לענות על שאלה צריך קודם למצוא את הקטע המדויק בתוך הטקסט.
+              </p>
+            </article>
+            <article class="card">
+              <div class="icon">🇮🇱</div>
+              <h3>עברית מקשה על השליפה</h3>
+              <p>
+                שאלות בעברית כוללות ניסוחים שונים, הטיות, וריאציות כתיב ומונחים
+                קולינריים. חיפוש מילולי בלבד לא תמיד מספיק.
+              </p>
+            </article>
+            <article class="card">
+              <div class="icon">🛡️</div>
+              <h3>מניעת הזיות של מודל</h3>
+              <p>
+                LLM עלול להמציא תשובה אם לא מגבילים אותו להקשר אמיתי. לכן המערכת
+                צריכה לענות רק מתוך קטעים שנשלפו מהמקורות.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section id="goals">
+          <div class="section-heading">
+            <div class="eyebrow">מטרת הפרויקט</div>
+            <h2>מטרת הפרויקט</h2>
+          </div>
+          <div class="goals-grid">
+            <article class="card">
+              <div class="icon">🔎</div>
+              <h3>אחזור מידע בעברית</h3>
+              <p>
+                לבנות מנגנון שמאתר את קטעי המתכון הרלוונטיים ביותר עבור שאלה
+                בעברית.
+              </p>
+            </article>
+            <article class="card">
+              <div class="icon">📌</div>
+              <h3>תשובות מבוססות מקור</h3>
+              <p>
+                להפיק תשובה קצרה ומדויקת שמבוססת על הטקסט שנשלף, ולא על ידע כללי
+                של המודל.
+              </p>
+            </article>
+            <article class="card">
+              <div class="icon">📊</div>
+              <h3>הערכה מדידה</h3>
+              <p>
+                למדוד את איכות המערכת גם ברמת השליפה וגם ברמת התשובה בעזרת Gold
+                Set, מדדי Retrieval, RAGAS ובדיקה אנושית.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section id="pipeline">
+          <div class="section-heading">
+            <div class="eyebrow">איך המערכת עובדת</div>
+            <h2>איך המערכת עובדת</h2>
+            <p>
+              בניתי את ה־pipeline כסדרה של שבעה שלבים ברורים, מהקורפוס הגולמי
+              ועד תשובה עברית קצרה ומבוססת הקשר.
+            </p>
+          </div>
+          <div class="pipeline-grid">
+            <article class="pipeline-step">
+              <div class="step-number">1</div>
+              <h3>טעינת מסמכי מתכונים</h3>
+              <p>סריקה של הקורפוס ואיתור קבצי PDF ו־DOCX לפני כל שלב עיבוד נוסף.</p>
+            </article>
+            <article class="pipeline-step">
+              <div class="step-number">2</div>
+              <h3>חילוץ וניקוי טקסט</h3>
+              <p>
+                חילצתי את התוכן מהקבצים וניקיתי אותו כדי להפוך את המסמכים לטקסט
+                שאפשר לאנדקס.
+              </p>
+            </article>
+            <article class="pipeline-step">
+              <div class="step-number">3</div>
+              <h3>Chunking</h3>
+              <p>
+                חילקתי את הטקסט ל־fixed-size chunks עם overlap כדי לשמור על הקשר
+                בין חלקים סמוכים.
+              </p>
+            </article>
+            <article class="pipeline-step">
+              <div class="step-number">4</div>
+              <h3>יצירת Embeddings</h3>
+              <p>
+                ייצגתי כל שאלה וכל chunk כווקטור סמנטי כדי לאפשר dense retrieval
+                עם FAISS.
+              </p>
+              <div class="pipeline-footer">
+                <div class="inline-model">מודל שלב השליפה: intfloat/multilingual-e5-small</div>
+              </div>
+            </article>
+            <article class="pipeline-step">
+              <div class="step-number">5</div>
+              <h3>Hybrid Retrieval</h3>
+              <p>
+                שילבתי FAISS dense retrieval עם BM25 ו־weighted fusion כדי לדרג
+                את ה־Top-K הסופי.
+              </p>
+            </article>
+            <article class="pipeline-step">
+              <div class="step-number">6</div>
+              <h3>יצירת תשובה</h3>
+              <p>
+                שלחתי את הקטעים המדורגים ל־LLM מקומי שמפיק תשובה עברית קצרה,
+                מבוססת מקור ויציבה.
+              </p>
+              <div class="pipeline-footer">
+                <div class="inline-model">מודל יצירת התשובה: qwen2.5:7b-instruct דרך Ollama</div>
+              </div>
+            </article>
+            <article class="pipeline-step">
+              <div class="step-number">7</div>
+              <h3>הערכה ושיפור</h3>
+              <p>
+                בדקתי את המערכת בעזרת Gold Set, מדדי Hit@K ו־MRR, מדדי RAGAS,
+                ניסויים ממוקדים וביקורת אנושית.
+              </p>
+              <div class="pipeline-footer">
+                <div class="inline-model">טיוטות Gold Set: qwen2.5:7b-instruct + review ידני</div>
+              </div>
+            </article>
+          </div>
+          <div class="pipeline-highlight">
+            אפשר לקרוא את השלבים בשלוש שכבות: הכנת הדאטה, שליפת ההקשר, ואז
+            generation והערכה. כך קל יותר לראות איפה כל מודל וכל מדד נכנסים
+            למערכת.
+          </div>
+        </section>
+
+        <section id="chunking">
+          <div class="section-heading">
+            <div class="eyebrow">Chunking</div>
+            <h2>אסטרטגיית Chunking</h2>
+            <p>
+              היישום בפועל מבוסס על Fixed-size chunking with metadata-aware
+              indexed text, בלי לטעון לחלוקה section-aware.
+            </p>
+          </div>
+          <div class="chunk-grid">
+            <article class="card chunk-card">
+              <div class="card-badge">300 מילים</div>
+              <h3>Fixed-size chunks</h3>
+              <p>
+                הטקסט חולק לקטעים בגודל קבוע כדי ליצור יחידות אחידות לאינדוקס
+                ולשליפה.
+              </p>
+            </article>
+            <article class="card chunk-card">
+              <div class="card-badge">50 מילים</div>
+              <h3>Overlap</h3>
+              <p>
+                נוסף overlap בין קטעים כדי לצמצם איבוד הקשר כאשר מידע חשוב נמצא
+                בגבול בין שני chunks.
+              </p>
+            </article>
+            <article class="card chunk-card">
+              <div class="card-badge">שם מקור + קטגוריה</div>
+              <h3>Metadata-aware indexed text</h3>
+              <p>
+                לכל chunk נוסף מידע מטא־דאטה כמו שם המקור והקטגוריה, כדי לשפר את
+                דירוג הקטעים הרלוונטיים בזמן השליפה.
+              </p>
+            </article>
+          </div>
+          <div class="insight-line">
+            בפרויקט RAG, איכות ה־Chunking והמטא־דאטה משפיעה ישירות על איכות
+            השליפה — ולכן גם על איכות התשובה הסופית.
+          </div>
+        </section>
+
+        <section id="architecture">
+          <div class="section-heading">
+            <div class="eyebrow">ארכיטקטורה</div>
+            <h2>ארכיטקטורה</h2>
+            <p>
+              המערכת משלבת מסלול Dense ומסלול Lexical במקביל, ואז מאחדת אותם
+              לדירוג היברידי לפני שליחת הקטעים למודל.
+            </p>
+            <p style="margin-top: 10px">
+              המערכת המקומית התבססה על מודלי LLM דרך Ollama, כאשר
+              qwen2.5:7b-instruct שימש כמודל המרכזי ליצירת תשובות. בנוסף,
+              ביצעתי השוואות מול מודלים נוספים, כולל gpt-4.1-mini, כדי להבין
+              האם הבעיה המרכזית נמצאת בשליפה או ביצירת התשובה. בדקתי גם את
+              llama3.1:8b על subset של שאלות בעייתיות כדי לבדוק אם מודל מקומי
+              אחר יכול לשפר את בעיית ה־generation. בפועל הוא לא שיפר מספיק,
+              ולכן לא נכנס ל־pipeline הסופי ונשאר כחלק מארכיון הניסויים.
+            </p>
+          </div>
+          <div class="architecture-board">
+            <div class="architecture-layout">
+              <div class="parallel-grid">
+                <div class="arch-column">
+                  <div class="arch-box">User Question</div>
+                  <div class="arch-line">↓</div>
+                  <div class="arch-box subtle">Embedding Model</div>
+                  <div class="arch-line">↓</div>
+                  <div class="arch-box">FAISS Dense Retrieval</div>
+                </div>
+                <div class="arch-line">⟱</div>
+                <div class="arch-column">
+                  <div class="arch-box">User Question</div>
+                  <div class="arch-line">↓</div>
+                  <div class="arch-box subtle">BM25 Lexical Retrieval</div>
+                  <div class="arch-line">↓</div>
+                  <div class="arch-box">Matching Terms</div>
+                </div>
+              </div>
+
+              <div class="fusion-panel">
+                <h3>Weighted Hybrid Fusion</h3>
+                <p>
+                  איחוד של שני מסלולי השליפה לדירוג סופי שמנצל גם דמיון סמנטי
+                  וגם התאמות לקסיקליות.
+                </p>
+                <div class="fusion-flow">
+                  <div class="arch-box">Weighted Hybrid Fusion</div>
+                  <div class="arch-arrow">←</div>
+                  <div class="arch-box subtle">Metadata-aware Indexed Text</div>
+                  <div class="arch-arrow">←</div>
+                  <div class="arch-box">Top-K Chunks</div>
+                </div>
+                <div class="fusion-flow" style="margin-top: 12px">
+                  <div class="arch-box">LLM</div>
+                  <div class="arch-arrow">←</div>
+                  <div class="arch-box">Hebrew Answer</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="stack-chips">
+              <span class="chip">Python</span>
+              <span class="chip">FAISS</span>
+              <span class="chip">BM25</span>
+              <span class="chip">intfloat/multilingual-e5-small</span>
+              <span class="chip">qwen2.5:7b-instruct</span>
+              <span class="chip">Ollama</span>
+              <span class="chip">RAGAS</span>
+              <span class="chip">gpt-4.1-mini</span>
+              <span class="chip">llama3.1:8b</span>
+              <span class="chip">Pandas</span>
+              <span class="chip">Jupyter</span>
+            </div>
+            <div class="note-box" style="margin-top: 18px">
+              <p>
+                לא הסתמכתי על מודל יחיד באופן עיוור. בדקתי זרימה מקומית דרך
+                Ollama כדי לשמור על דמו מקומי ואופליין, ובמקביל השוויתי מול מודל
+                OpenAI חזק יותר כדי להבין האם צוואר הבקבוק נשאר במודל עצמו גם
+                כאשר ה־retrieval קבוע.
+              </p>
+            </div>
+            <div class="note-box" style="margin-top: 18px">
+              <p>
+                מיד אחרי הארכיטקטורה מופיע מיפוי מלא של כל המודלים בפרויקט:
+                איזה מודל שימש לשליפה, איזה מודל שימש ליצירת תשובות, איזה מודל
+                שימש לטיוטות Gold Set, ואילו מודלים הופיעו רק בהשוואות או
+                בריצות evaluation ארכיוניות.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section id="models">
+          <div class="section-heading">
+            <div class="eyebrow">מודלים בפרויקט</div>
+            <h2>באילו מודלים השתמשתי?</h2>
+            <p>
+              בפרויקט לא השתמשתי במודל אחד שעושה הכל. חילקתי את המערכת לשלבים,
+              ולכל שלב היה מודל או כלי מתאים: מודל embedding לשליפה סמנטית,
+              מודל מקומי ליצירת תשובות, מודל עזר ליצירת טיוטות Gold Set, ומודל
+              חיצוני להשוואת איכות ה־generation.
+            </p>
+          </div>
+          <div class="model-subsection">
+            <div class="note-box">
+              <p>
+                ההפרדה הזאת עזרה לי להבין מה קורה בכל שלב: האם הבעיה היא ב־dense
+                retrieval, האם ההקשר כבר הגיע אבל המודל לא חילץ ממנו תשובה
+                מדויקת, או האם מודל evaluation חיצוני נותן תמונה חלקית בלבד.
+              </p>
+            </div>
+            <div class="model-grid">
+              <article class="model-card">
+                <div class="model-type">Embedding · Retrieval</div>
+                <h4>intfloat/multilingual-e5-small</h4>
+                <p>זה היה מודל ה־embedding של שלב השליפה.</p>
+                <ul>
+                  <li>המיר שאלות ו־chunks ל־embeddings.</li>
+                  <li>שימש ל־dense semantic retrieval עם FAISS.</li>
+                  <li>לא שימש ליצירת תשובות.</li>
+                </ul>
+              </article>
+              <article class="model-card emphasis">
+                <div class="model-type">Local · Answer Generation</div>
+                <h4>qwen2.5:7b-instruct</h4>
+                <p>זה היה מודל התשובה המקומי המרכזי דרך Ollama.</p>
+                <ul>
+                  <li>קיבל את ההקשר שנשלף והפיק תשובות עבריות מבוססות מקור.</li>
+                  <li>שימש בדמו המקומי ובזרימת העבודה האופליין.</li>
+                  <li>השתמשתי בו עם temperature נמוך כדי לשמור על יציבות.</li>
+                </ul>
+              </article>
+              <article class="model-card">
+                <div class="model-type">Gold Set · Drafting Support</div>
+                <h4>qwen2.5:7b-instruct</h4>
+                <p>אותו מודל שימש גם ליצירת טיוטות של שאלות ותשובות ייחוס.</p>
+                <ul>
+                  <li>השתמשתי בו כדי לנסח מועמדים ל־Gold Set מתוך corpus chunks.</li>
+                  <li>ה־Gold Set הסופי לא נבנה אוטומטית.</li>
+                  <li>המועמדים עברו review, סינון ומיזוג ידני ל־50 שאלות סופיות.</li>
+                </ul>
+              </article>
+              <article class="model-card">
+                <div class="model-type">OpenAI · Comparison</div>
+                <h4>gpt-4.1-mini</h4>
+                <p>מודל חיצוני שבו השתמשתי רק לניסוי השוואתי מבוקר.</p>
+                <ul>
+                  <li>השוויתי אותו למודל המקומי על אותו fixed context.</li>
+                  <li>הוא עזר לי לבדוק אם generation הוא צוואר הבקבוק.</li>
+                  <li>הוא לא היה מודל ברירת המחדל של ה־pipeline המקומי.</li>
+                </ul>
+              </article>
+              <article class="model-card">
+                <div class="model-type">Archive · RAGAS Evaluation</div>
+                <h4>llama3.1:8b</h4>
+                <p>מודל מקומי נוסף שבדקתי על subset של שאלות בעייתיות.</p>
+                <ul>
+                  <li>בדקתי אם הוא יכול לשפר את בעיית ה־generation.</li>
+                  <li>בפועל הוא לא שיפר מספיק ולכן לא נכנס ל־pipeline הסופי.</li>
+                  <li>הוא נשאר מתועד רק כחלק מארכיון הניסויים וההערכה.</li>
+                </ul>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section id="retrieval-evolution">
+          <div class="section-heading">
+            <div class="eyebrow">Retrieval Evolution</div>
+            <h2>התפתחות ביצועי השליפה</h2>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>הגדרה</th>
+                  <th>Hit@5</th>
+                  <th>Hit@20</th>
+                  <th>MRR</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Dense FAISS בלבד</td>
+                  <td>68%</td>
+                  <td>82%</td>
+                  <td>0.4857</td>
+                </tr>
+                <tr>
+                  <td>BM25 בלבד</td>
+                  <td>78%</td>
+                  <td>88%</td>
+                  <td>0.7155</td>
+                </tr>
+                <tr>
+                  <td>Hybrid ללא מטא־דאטה</td>
+                  <td>82%</td>
+                  <td>88%</td>
+                  <td>0.7248</td>
+                </tr>
+                <tr class="highlight-row">
+                  <td>Hybrid + מטא־דאטה</td>
+                  <td>92%</td>
+                  <td>94%</td>
+                  <td>0.8412</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="note-box" style="margin-top: 18px">
+            <p>
+              המעבר לשליפה היברידית שיפר את היכולת למצוא התאמות גם לפי משמעות
+              וגם לפי מילים מדויקות. הוספת מטא־דאטה לאינדוקס תרמה לשיפור נוסף,
+              כי שם המתכון והקטגוריה עזרו לדרג גבוה יותר את המקורות הנכונים.
+            </p>
+          </div>
+        </section>
+
+        <section id="aaruuk">
+          <div class="section-heading">
+            <div class="eyebrow">דוגמה ממאגר השאלות</div>
+            <h2>דוגמה אמיתית: מתכון אערווק</h2>
+            <p>
+              שמות מתכונים לא שגרתיים הם מקרה מבחן טוב ל־RAG בעברית. בדוגמה
+              הזו השיפור המרכזי היה בשליפה, לא בתשובה הסופית.
+            </p>
+          </div>
+          <article class="card example-card">
+            <div class="example-meta">
+              <div class="example-chip">Final Gold Set</div>
+              <div class="example-chip">אערווק.docx [docx:Recipes/אערווק.docx_chunk_000]</div>
+              <div class="example-chip">Hybrid Retrieval + Metadata</div>
+            </div>
+            <div class="example-grid">
+              <div class="example-panel">
+                <h3>השאלה</h3>
+                <p class="example-question">
+                  במתכון אערווק, איזה שדרוג אפשר להוסיף לעיסה?
+                </p>
+                <p>
+                  לפני הוספת metadata לשדה החיפוש, שם מתכון לא שגרתי כמו
+                  "אערווק" היה קשה יותר לשליפה. אחרי metadata-aware retrieval,
+                  המקור הנכון — אערווק.docx — הגיע למקום הראשון.
+                </p>
+              </div>
+              <div class="example-panel">
+                <h3>מה קרה בפועל</h3>
+                <p class="example-answer">לא נמצא מידע מספיק במקורות.</p>
+                <p>
+                  עם זאת, מודל ה־generation המקומי עדיין החזיר fallback ולא
+                  חילץ את התשובה מתוך ההקשר שנשלף, למרות שהמקור הנכון כבר הופיע
+                  ראשון בתוצאות.
+                </p>
+              </div>
+            </div>
+            <div class="note-box" style="margin-top: 18px">
+              <p>
+                בדוגמה הזו השיפור המרכזי היה בשליפה, לא בתשובה הסופית. לפני
+                הוספת metadata לשדה החיפוש, שם מתכון לא שגרתי כמו "אערווק" היה
+                קשה יותר לשליפה. אחרי metadata-aware retrieval, המקור הנכון —
+                אערווק.docx — הגיע למקום הראשון. עם זאת, מודל ה־generation
+                המקומי עדיין החזיר fallback: "לא נמצא מידע מספיק במקורות."
+                לכן הדוגמה הזו מראה גם את התרומה של metadata ל־retrieval וגם את
+                העובדה שה־generation נשאר צוואר הבקבוק.
+              </p>
+              <p>
+                תשובת הייחוס מה־Gold Set לשאלה הזו היא: "אפשר להוסיף לעיסה חזה
+                עוף קצוץ."
+              </p>
+            </div>
+          </article>
+        </section>
+
+        <section id="evaluation">
+          <div class="section-heading">
+            <div class="eyebrow">תוצאות הערכה</div>
+            <h2>תוצאות הערכה</h2>
+            <p>
+              המדדים מראים בבירור שהמערכת חזקה יותר ברמת השליפה מאשר ברמת יצירת
+              התשובה הסופית.
+            </p>
+            <p style="margin-top: 10px">
+              מדדי Retrieval בודקים האם המערכת מצאה את הקטעים הנכונים, בעוד
+              שמדדי RAGAS בודקים את איכות ההקשר והתשובה שנוצרה.
+            </p>
+          </div>
+          <div class="evaluation-layout">
+            <div class="eval-metrics-grid">
+              <div class="eval-group-title">מדדי Retrieval</div>
+              <article class="metric-card">
+                <span class="metric-value">92%</span>
+                <div class="metric-label">Hit@5</div>
+                <small
+                  >ב־92% מהשאלות, הקטע הרלוונטי נמצא בתוך חמשת הקטעים
+                  הראשונים.</small
+                >
+              </article>
+              <article class="metric-card">
+                <span class="metric-value">0.8412</span>
+                <div class="metric-label">MRR</div>
+                <small
+                  >הקטע הרלוונטי הופיע בממוצע במיקום גבוה מאוד בדירוג.</small
+                >
+              </article>
+              <div class="eval-group-title ragas">מדדי RAGAS</div>
+              <article class="metric-card">
+                <span class="metric-value">0.8980</span>
+                <div class="metric-label">context_recall</div>
+                <small>ברוב המקרים, המידע הדרוש הופיע בהקשר שנשלח למודל.</small>
+              </article>
+              <article class="metric-card">
+                <span class="metric-value">0.7278</span>
+                <div class="metric-label">context_precision</div>
+                <small>חלק גדול מהקטעים שנשלפו באמת היו שימושיים לשאלה.</small>
+              </article>
+              <article class="metric-card">
+                <span class="metric-value">0.5708</span>
+                <div class="metric-label">answer_relevancy</div>
+                <small>רלוונטיות התשובות הייתה בינונית ודורשת שיפור.</small>
+              </article>
+              <article class="metric-card">
+                <span class="metric-value">0.3945</span>
+                <div class="metric-label">faithfulness</div>
+                <small
+                  >נאמנות התשובה להקשר הייתה נמוכה יחסית, ולכן שלב ה־Generation
+                  הוא צוואר הבקבוק המרכזי.</small
+                >
+              </article>
+            </div>
+            <div class="note-box">
+              <h3>פירוש לתוצאות</h3>
+              <p>
+                המדדים מראים תמונה ברורה: שלב ה־Retrieval חזק, כי המערכת לרוב
+                מצליחה להביא את המידע הנכון. לעומת זאת, שלב ה־Generation עדיין
+                חלש יותר — המודל לא תמיד מחלץ את התשובה בצורה מדויקת ונאמנה.
+                בנוסף, RAGAS שימושי ככלי הערכה, אך בעברית נדרש לשלב גם בדיקה
+                אנושית.
+              </p>
+              <p>
+                בדקתי גם את llama3.1:8b על subset של שאלות בעייתיות כדי לבדוק אם
+                מודל מקומי אחר יכול לשפר את בעיית ה־generation. בפועל הוא לא
+                שיפר מספיק, ולכן לא נכנס ל־pipeline הסופי ונשאר כחלק מארכיון
+                הניסויים.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section id="experiments">
+          <div class="section-heading">
+            <div class="eyebrow">ניסויים מבוקרים</div>
+            <h2>ניסויים מבוקרים</h2>
+            <p>
+              כדי להבין את צוואר הבקבוק של המערכת, ביצעתי ניסויים ממוקדים שבודדו
+              רכיבים שונים במקום לשנות הכל בבת אחת.
+            </p>
+          </div>
+          <div class="experiments-grid">
+            <article class="card experiment-block">
+              <div class="icon">🧪</div>
+              <h3>Strict Prompt</h3>
+              <p>
+                <strong>What tested:</strong> בדקתי האם פרומפט קפדני וקצר יותר
+                משפר את נאמנות התשובה.
+              </p>
+              <p>
+                <strong>Result:</strong> 5/6 שורות השתפרו — yes=4, partial=1,
+                כלומר 83%.
+              </p>
+            </article>
+            <article class="card experiment-block">
+              <div class="icon">📚</div>
+              <h3>Context Ordering</h3>
+              <p>
+                <strong>What tested:</strong> בדקתי האם סדר הקטעים ומספר הקטעים
+                שנשלחים למודל משפיעים על איכות התשובה.
+              </p>
+              <p>
+                <strong>Result:</strong> top_3 היה מעט טוב יותר מ־top_5,
+                ו־oracle context לא תמיד שיפר את התוצאה.
+              </p>
+            </article>
+            <article class="card experiment-block">
+              <div class="icon">⚖️</div>
+              <h3>Local vs OpenAI</h3>
+              <p>
+                <strong>What tested:</strong> השוויתי בין המודל המקומי המרכזי
+                לבין gpt-4.1-mini על אותם הקשרים, כדי לבדוק האם מודל חזק יותר
+                מצליח לחלץ תשובות טובות יותר כאשר ה־retrieval כבר קבוע.
+              </p>
+              <p>
+                <strong>Result:</strong> נבדקו 12 שורות הערכה מתוך 4 שאלות
+                ייחודיות: OpenAI היה טוב יותר ב־8, שיפור חלקי ב־2, וללא שיפור
+                ב־2.
+              </p>
+            </article>
+            <article class="card experiment-block">
+              <div class="icon">🎯</div>
+              <h3>generation_context_k=3</h3>
+              <p>
+                <strong>What tested:</strong> בדקתי האם שליחת פחות קטעים למודל
+                תשפר את התשובה.
+              </p>
+              <p>
+                <strong>Result:</strong> ברוב השורות לא נצפה שיפור משמעותי, ולכן
+                זה לא היה פתרון מרכזי.
+              </p>
+            </article>
+            <article class="card experiment-block">
+              <div class="icon">🔁</div>
+              <h3>Lightweight Rerank</h3>
+              <p>
+                <strong>What tested:</strong> בדקתי האם שכבת rerank קלה משפרת את
+                הדירוג אחרי השליפה.
+              </p>
+              <p>
+                <strong>Result:</strong> השיפור היה לא יציב: הוא עזר בחלק
+                מהמקרים, אך פגע במקרה Q41, ולכן לא הופעל כברירת מחדל.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section id="demo">
+          <div class="section-heading">
+            <div class="eyebrow">שאלות לדוגמה</div>
+            <h2>שאלות לדוגמה</h2>
+            <p>
+              כמה דוגמאות שמראות איך המערכת עונה על סוגים שונים של שאלות מתוך
+              מסמכי המתכונים.
+            </p>
+          </div>
+          <div class="demo-grid">
+            <article class="demo-card main-demo">
+              <div class="demo-label">שאלה מספרית · תשובת מערכת</div>
+              <div class="demo-row">
+                <h4>שאלה</h4>
+                <p style="color: var(--text)">
+                  מה כמות הקמח, המים והשמרים בבצק הפיצה?
+                </p>
+              </div>
+              <div class="demo-row demo-answer">
+                <h4>תשובה</h4>
+                <p>320 גרם קמח, 188 גרם מים, 0.65 גרם שמרים יבשים</p>
+              </div>
+              <div class="demo-row">
+                <h4>הסבר</h4>
+                <p>
+                  דוגמה לשאלה שבה המערכת צריכה לשלוף כמויות מדויקות מתוך מתכון.
+                </p>
+              </div>
+            </article>
+
+            <article class="demo-card">
+              <div class="demo-label">שאלת רכיבים · דוגמת Gold Set</div>
+              <div class="demo-row">
+                <h4>שאלה</h4>
+                <p style="color: var(--text)">
+                  מהם הרכיבים להכנת אבקת מרק עוף ביתית?
+                </p>
+              </div>
+              <div class="demo-row demo-answer">
+                <h4>תשובה</h4>
+                <p>
+                  4 כפות כורכום, 4 כפות חווג׳ למרק, 2 כפות פטרוזיליה יבשה, 2
+                  כפות אבקת שום, 4 כפות אבקת בצל ו־2 כפות מלח.
+                </p>
+              </div>
+              <div class="demo-row">
+                <h4>הסבר</h4>
+                <p>דוגמה לשאלה שמחזירה רשימת רכיבים מתוך מקור אחד.</p>
+              </div>
+            </article>
+
+            <article class="demo-card">
+              <div class="demo-label">שאלת הסבר · תשובת ייחוס</div>
+              <div class="demo-row">
+                <h4>שאלה</h4>
+                <p style="color: var(--text)">
+                  למה לא משרים סלמון קפוא בקערת מים לפי המתכון?
+                </p>
+              </div>
+              <div class="demo-row demo-answer">
+                <h4>תשובה</h4>
+                <p>
+                  כי השריה במים עלולה לפגוע במרקם הדג, ולכן לפי המתכון עדיף
+                  להפשיר את הסלמון במקרר או בטמפרטורת החדר.
+                </p>
+              </div>
+              <div class="demo-row">
+                <h4>הסבר</h4>
+                <p>דוגמה לשאלה שבה צריך לחלץ נימוק מתוך ההקשר ולא רק מספרים.</p>
+              </div>
+            </article>
+
+            <article class="demo-card fallback-demo">
+              <div class="demo-label">אין מספיק מידע</div>
+              <div class="demo-row">
+                <h4>שאלה</h4>
+                <p style="color: var(--text)">
+                  כמה קלוריות יש במנה אחת של בצק הפיצה?
+                </p>
+              </div>
+              <div class="demo-row fallback-answer">
+                <h4>תשובה</h4>
+                <p>לא נמצא מידע מספיק במקורות.</p>
+              </div>
+              <div class="demo-row">
+                <h4>הסבר</h4>
+                <p>
+                  דוגמה לשאלה שנשמעת טבעית, אבל המידע התזונתי לא מופיע במתכון.
+                  במקרה כזה המערכת מחזירה תשובת fallback במקום להמציא ערך קלורי.
+                </p>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section id="challenges">
+          <div class="section-heading">
+            <div class="eyebrow">אתגרים ודילמות</div>
+            <h2>אתגרים ודילמות</h2>
+          </div>
+          <div class="challenges-grid">
+            <article class="card">
+              <div class="icon">↔️</div>
+              <h3>עברית ו־RTL</h3>
+              <p>
+                עברית דורשת תשומת לב לניסוחים, כיווניות, וריאציות כתיב ושילוב
+                מונחים באנגלית.
+              </p>
+            </article>
+            <article class="card">
+              <div class="icon">✂️</div>
+              <h3>בחירת גודל Chunk</h3>
+              <p>
+                Chunk קטן מדי מאבד הקשר, ו־chunk גדול מדי מכניס רעש ופוגע בדיוק
+                השליפה.
+              </p>
+            </article>
+            <article class="card">
+              <div class="icon">🧠</div>
+              <h3>בחירת מודל Embedding</h3>
+              <p>
+                היה צורך במודל רב־לשוני שמסוגל לייצג שאלות ומתכונים בעברית בצורה
+                טובה.
+              </p>
+            </article>
+            <article class="card">
+              <div class="icon">🏷️</div>
+              <h3>שמות מתכונים חריגים</h3>
+              <p>
+                שם מתכון לא שגרתי כמו "אערווק" מדגים אתגר בשליפה: embedding
+                סמנטי לא תמיד מספיק כאשר שם המקור חשוב, ולכן שילוב BM25
+                ומטא־דאטה עוזר לזהות את המסמך הנכון.
+              </p>
+            </article>
+            <article class="card">
+              <div class="icon">🎯</div>
+              <h3>איזון Top-K</h3>
+              <p>
+                יותר קטעים מגדילים סיכוי לכלול את התשובה, אבל גם מעלים רעש שמקשה
+                על המודל.
+              </p>
+            </article>
+            <article class="card">
+              <div class="icon">⏱️</div>
+              <h3>עלות וזמן הערכה עם RAGAS</h3>
+              <p>
+                מדדי Generation דורשים זמן ומשאבים, ולכן היה צורך לבצע ניסויים
+                ממוקדים ולא להריץ הכל מחדש בכל שינוי.
+              </p>
+            </article>
+            <article class="card">
+              <div class="icon">📏</div>
+              <h3>אמינות RAGAS בעברית</h3>
+              <p>
+                RAGAS נתן ציונים נמוכים לחלק מהתשובות שנראו נכונות בבדיקה
+                אנושית, ולכן נדרשה שכבת ביקורת ידנית.
+              </p>
+            </article>
+            <article class="card">
+              <div class="icon">🛡️</div>
+              <h3>מניעת Hallucinations</h3>
+              <p>
+                המערכת נדרשה לענות רק מתוך ההקשר שנשלף ולהחזיר הודעת fallback
+                כאשר אין מספיק מידע.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section id="lessons">
+          <div class="section-heading">
+            <div class="eyebrow">מה למדתי</div>
+            <h2>מה למדתי</h2>
+          </div>
+          <div class="lessons-grid">
+            <article class="card">
+              <div class="icon">🧩</div>
+              <h3>Retrieval ו־Generation הם בעיות שונות</h3>
+              <p>
+                גם כאשר המערכת שולפת את המידע הנכון, המודל עדיין עלול לא לחלץ
+                ממנו תשובה מדויקת.
+              </p>
+            </article>
+            <article class="card">
+              <div class="icon">📈</div>
+              <h3>Retrieval חזק לא מספיק</h3>
+              <p>
+                Hit@5 גבוה ו־context_recall גבוה מוכיחים שהמידע מגיע להקשר, אבל
+                faithfulness נמוך מצביע על בעיית יצירת תשובה.
+              </p>
+            </article>
+            <article class="card">
+              <div class="icon">🏷️</div>
+              <h3>מטא־דאטה משנה תוצאה</h3>
+              <p>
+                הוספת שם המקור והקטגוריה לאינדוקס שיפרה את הדירוג ועזרה למערכת
+                לזהות טוב יותר את המתכון הנכון.
+              </p>
+            </article>
+            <article class="card">
+              <div class="icon">⚠️</div>
+              <h3>RAGAS הוא כלי, לא אמת מוחלטת</h3>
+              <p>
+                במיוחד בעברית, חשוב לשלב מדדים אוטומטיים עם בדיקה אנושית כדי
+                להבין את איכות התשובות.
+              </p>
+            </article>
+            <article class="card">
+              <div class="icon">🧪</div>
+              <h3>ניסויים מבוקרים מונעים עבודה בכיוון הלא נכון</h3>
+              <p>
+                הפרדה בין retrieval, context ordering ו־generation עזרה לזהות
+                שצוואר הבקבוק המרכזי הוא שלב התשובה.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section id="future">
+          <div class="section-heading">
+            <div class="eyebrow">המשך עבודה</div>
+            <h2>המשך עבודה</h2>
+          </div>
+          <div class="future-grid">
+            <article class="card">
+              <div class="icon">📝</div>
+              <h3>שיפור פרומפט התשובה</h3>
+              <p>לחדד את ההנחיות למודל כדי לשפר נאמנות, קיצור ודיוק.</p>
+            </article>
+            <article class="card">
+              <div class="icon">🔗</div>
+              <h3>הוספת ציטוטי מקור</h3>
+              <p>להציג ליד כל תשובה את שם המתכון או הקטע שממנו נשלפה התשובה.</p>
+            </article>
+            <article class="card">
+              <div class="icon">🧱</div>
+              <h3>שיפור אסטרטגיית Chunking</h3>
+              <p>
+                לבחון חלוקה חכמה יותר לפי מבנה מתכון: כותרת, רכיבים, הוראות
+                וטיפים.
+              </p>
+            </article>
+            <article class="card">
+              <div class="icon">📚</div>
+              <h3>השוואת מודלי Embedding נוספים</h3>
+              <p>
+                לבדוק מודלים נוספים שמתאימים טוב יותר לעברית ולתחום הקולינרי.
+              </p>
+            </article>
+            <article class="card">
+              <div class="icon">🌐</div>
+              <h3>ממשק Web לשאילתות</h3>
+              <p>
+                להוסיף ממשק משתמש פשוט שמאפשר לשאול שאלות ולקבל תשובות בזמן אמת.
+              </p>
+            </article>
+            <article class="card">
+              <div class="icon">⚡</div>
+              <h3>Cache לדמו מהיר</h3>
+              <p>לשמור תוצאות לשאלות דמו כדי להבטיח הצגה יציבה ומהירה.</p>
+            </article>
+            <article class="card">
+              <div class="icon">🍲</div>
+              <h3>הרחבת הדאטה</h3>
+              <p>
+                להוסיף מסמכים ומתכונים נוספים כדי לבחון את המערכת על קורפוס גדול
+                ומגוון יותר.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <footer class="footer">
+          <div>
+            <strong>מערכת RAG למתכונים בעברית</strong><br />
+            קורס פיתוח AI<br />
+            מגיש: מבשר זהוראי
+          </div>
+          <div class="footer-links">
+            <a
+              href="https://github.com/mevaser/recipe-rag-hebrew"
+              target="_blank"
+              rel="noopener noreferrer"
+              >GitHub</a
+            >
+            <a href="#">Notebook</a>
+            <a href="#">Demo</a>
+          </div>
+        </footer>
+      </main>
+    </div>
+  </body>
+</html>

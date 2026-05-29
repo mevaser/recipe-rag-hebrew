@@ -10,3 +10,7 @@ tqdm
 requests
 openpyxl
 rank-bm25
+ragas
+openai
+langchain-ollama
+langchain-huggingface

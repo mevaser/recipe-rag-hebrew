@@ -27,6 +27,9 @@ DEFAULT_CANDIDATE_K = 50
 DEFAULT_RRF_K = 60
 DEFAULT_DENSE_WEIGHT = 1.0
 DEFAULT_BM25_WEIGHT = 1.0
+DEFAULT_RERANK_BM25_WEIGHT = 0.30
+DEFAULT_RERANK_SOURCE_WEIGHT = 0.20
+DEFAULT_RERANK_KEYWORD_WEIGHT = 0.10
 
 
 def configure_stdout() -> None:
@@ -83,6 +86,29 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=DEFAULT_BM25_WEIGHT,
         help="BM25 retrieval weight for hybrid RRF. Defaults to 1.0.",
+    )
+    parser.add_argument(
+        "--enable-lightweight-rerank",
+        action="store_true",
+        help="Enable lightweight BM25/source/keyword reranking after hybrid fusion.",
+    )
+    parser.add_argument(
+        "--rerank-bm25-weight",
+        type=float,
+        default=DEFAULT_RERANK_BM25_WEIGHT,
+        help="Lightweight rerank BM25 rank weight. Defaults to 0.30.",
+    )
+    parser.add_argument(
+        "--rerank-source-weight",
+        type=float,
+        default=DEFAULT_RERANK_SOURCE_WEIGHT,
+        help="Lightweight rerank source/title overlap weight. Defaults to 0.20.",
+    )
+    parser.add_argument(
+        "--rerank-keyword-weight",
+        type=float,
+        default=DEFAULT_RERANK_KEYWORD_WEIGHT,
+        help="Lightweight rerank keyword overlap weight. Defaults to 0.10.",
     )
     return parser.parse_args()
 
@@ -217,6 +243,10 @@ def retrieve_for_mode(
     rrf_k: int,
     dense_weight: float,
     bm25_weight: float,
+    enable_lightweight_rerank: bool,
+    rerank_bm25_weight: float,
+    rerank_source_weight: float,
+    rerank_keyword_weight: float,
 ) -> list[dict]:
     if mode == "dense":
         return retrieve_dense(query, k=k)
@@ -234,6 +264,10 @@ def retrieve_for_mode(
             rrf_k=rrf_k,
             dense_weight=dense_weight,
             bm25_weight=bm25_weight,
+            enable_lightweight_rerank=enable_lightweight_rerank,
+            rerank_bm25_weight=rerank_bm25_weight,
+            rerank_source_weight=rerank_source_weight,
+            rerank_keyword_weight=rerank_keyword_weight,
         )
     raise ValueError(f"Unsupported retrieval mode: {mode}")
 
@@ -247,6 +281,10 @@ def evaluate_example(
     rrf_k: int,
     dense_weight: float,
     bm25_weight: float,
+    enable_lightweight_rerank: bool,
+    rerank_bm25_weight: float,
+    rerank_source_weight: float,
+    rerank_keyword_weight: float,
     chunk_lookup: dict[str, dict],
 ) -> dict:
     retrieved_chunks = retrieve_for_mode(
@@ -257,6 +295,10 @@ def evaluate_example(
         rrf_k=rrf_k,
         dense_weight=dense_weight,
         bm25_weight=bm25_weight,
+        enable_lightweight_rerank=enable_lightweight_rerank,
+        rerank_bm25_weight=rerank_bm25_weight,
+        rerank_source_weight=rerank_source_weight,
+        rerank_keyword_weight=rerank_keyword_weight,
     )
     retrieved_chunk_ids = [chunk["chunk_id"] for chunk in retrieved_chunks]
     expected_chunk_ids = example["must_cite_chunk_ids"]
@@ -362,6 +404,10 @@ def evaluate(
     rrf_k: int,
     dense_weight: float,
     bm25_weight: float,
+    enable_lightweight_rerank: bool,
+    rerank_bm25_weight: float,
+    rerank_source_weight: float,
+    rerank_keyword_weight: float,
 ) -> dict:
     if max_k <= 0:
         raise ValueError("max_k must be greater than 0.")
@@ -389,6 +435,10 @@ def evaluate(
             rrf_k=rrf_k,
             dense_weight=dense_weight,
             bm25_weight=bm25_weight,
+            enable_lightweight_rerank=enable_lightweight_rerank,
+            rerank_bm25_weight=rerank_bm25_weight,
+            rerank_source_weight=rerank_source_weight,
+            rerank_keyword_weight=rerank_keyword_weight,
             chunk_lookup=indexed_chunk_lookup,
         )
         for index, example in enumerate(examples, start=1)
@@ -412,6 +462,10 @@ def evaluate(
             "rrf_k": rrf_k if mode == "hybrid" else None,
             "dense_weight": dense_weight if mode == "hybrid" else None,
             "bm25_weight": bm25_weight if mode == "hybrid" else None,
+            "enable_lightweight_rerank": enable_lightweight_rerank if mode == "hybrid" else None,
+            "rerank_bm25_weight": rerank_bm25_weight if mode == "hybrid" else None,
+            "rerank_source_weight": rerank_source_weight if mode == "hybrid" else None,
+            "rerank_keyword_weight": rerank_keyword_weight if mode == "hybrid" else None,
             "indexed_chunks_path": str(DEFAULT_INDEXED_CHUNKS_PATH),
         },
         "summary_metrics": {
@@ -458,6 +512,11 @@ def print_summary(results: dict) -> None:
         print(f"RRF K: {results['run_config']['rrf_k']}")
         print(f"Dense weight: {results['run_config']['dense_weight']}")
         print(f"BM25 weight: {results['run_config']['bm25_weight']}")
+        print(f"Lightweight rerank enabled: {results['run_config']['enable_lightweight_rerank']}")
+        if results["run_config"]["enable_lightweight_rerank"]:
+            print(f"Rerank BM25 weight: {results['run_config']['rerank_bm25_weight']}")
+            print(f"Rerank source weight: {results['run_config']['rerank_source_weight']}")
+            print(f"Rerank keyword weight: {results['run_config']['rerank_keyword_weight']}")
     print(f"Total questions: {summary_metrics['total_questions']}")
     print(f"MRR: {summary_metrics['mrr']:.4f}")
     average_rank = summary_metrics["average_first_relevant_rank"]
@@ -560,6 +619,10 @@ def main() -> None:
         rrf_k=args.rrf_k,
         dense_weight=args.dense_weight,
         bm25_weight=args.bm25_weight,
+        enable_lightweight_rerank=args.enable_lightweight_rerank,
+        rerank_bm25_weight=args.rerank_bm25_weight,
+        rerank_source_weight=args.rerank_source_weight,
+        rerank_keyword_weight=args.rerank_keyword_weight,
     )
     print_summary(results)
     save_results(results, DEFAULT_RESULTS_PATH)
